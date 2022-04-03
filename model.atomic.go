@@ -359,6 +359,9 @@ func (mod *Model) DeleteWhere(param QueryParam) (int, error) {
 		if mod.Driver == "sqlite3" {
 			return mod.sqlite3DeleteWhere(param)
 		}
+		if mod.Driver == "hdb" {
+			return mod.hdbDeleteWhere(param)
+		}
 
 		data := maps.MapStrAny{}
 		columns := []string{}
@@ -406,6 +409,51 @@ func (mod *Model) DeleteWhere(param QueryParam) (int, error) {
 	}
 
 	return mod.DestroyWhere(param)
+}
+func (mod *Model) hdbDeleteWhere(param QueryParam) (int, error) {
+	data := maps.MapStrAny{}
+	columns := []string{}
+	for _, col := range mod.UniqueColumns {
+		typ := strings.ToLower(col.Type)
+		if typ == "string" {
+			data[col.Name] = dbal.Raw(fmt.Sprintf(fmt.Sprintf("'_' || '%d'", time.Now().UnixNano())))
+			columns = append(
+				columns,
+				fmt.Sprintf(`'%s'  || ':' || "%s"`, col.Name, col.Name),
+			)
+		} else { // 数字, 布尔型等
+			columns = append(
+				columns,
+				fmt.Sprintf(`'%s'  || ':' || %s`, col.Name, col.Name),
+			)
+		}
+		if col.Nullable {
+			data[col.Name] = nil
+		}
+	}
+
+	param.Model = mod.Name
+	stack := NewQueryStack(param)
+	qb := stack.FirstQuery()
+
+	// 备份唯一数据
+	if len(columns) > 0 {
+		restore := dbal.Raw(`'{' || ` + strings.Join(columns, " || ',' || ") + ` || '}'`)
+		_, err := qb.Update(maps.MapStr{"__restore_data": restore})
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	// 删除数据
+	field := fmt.Sprintf("%s.%s", mod.MetaData.Table.Name, "deleted_at")
+	// data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
+	data[field] = dbal.Raw("CURRENT_TIMESTAMP")
+	effect, err := qb.Update(data)
+	if err != nil {
+		return 0, err
+	}
+	return int(effect), nil
 }
 
 // sqliteDeleteWhere SQLite
