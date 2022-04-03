@@ -3,6 +3,7 @@ package gou
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,8 +22,8 @@ import (
 // HTTPGuards 支持的中间件
 var HTTPGuards = map[string]gin.HandlerFunc{}
 
-// processGuard guard process
-func processGuard(name string) gin.HandlerFunc {
+// ProcessGuard guard process
+func ProcessGuard(name string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body interface{}
 		bytes, err := ioutil.ReadAll(c.Request.Body)
@@ -33,9 +34,14 @@ func processGuard(name string) gin.HandlerFunc {
 				body = string(bytes)
 			}
 		}
+		params := map[string]string{}
+		for _, param := range c.Params {
+			params[param.Key] = param.Value
+		}
 
 		args := []interface{}{
 			c.FullPath(),          // api path
+			params,                // api params
 			c.Request.URL.Query(), // query string
 			body,                  // payload
 			c.Request.Header,      // Request headers
@@ -54,8 +60,34 @@ func processGuard(name string) gin.HandlerFunc {
 			}
 		}
 		process.Run()
-		c.Next()
 	}
+}
+
+// IsAllowed check if the referer is in allow list
+func IsAllowed(c *gin.Context, allowsMap map[string]bool) bool {
+	referer := c.Request.Referer()
+	if referer != "" {
+		url, err := url.Parse(referer)
+		if err != nil {
+			return true
+		}
+
+		port := fmt.Sprintf(":%s", url.Port())
+		if port == ":" || port == ":80" || port == ":443" {
+			port = ""
+		}
+		host := fmt.Sprintf("%s%s", url.Hostname(), port)
+		fmt.Println(url, host, c.Request.Host)
+		fmt.Println(allowsMap)
+		if host == c.Request.Host {
+			return true
+		}
+		if _, has := allowsMap[host]; !has {
+			return false
+		}
+	}
+	return true
+
 }
 
 // Routes 配置转换为路由
@@ -76,12 +108,32 @@ func (http HTTP) Route(router gin.IRoutes, path Path, allows ...string) {
 	handlers := []gin.HandlerFunc{}
 
 	// 跨域访问
-	if len(allows) > 0 {
+	if allows != nil && len(allows) > 0 {
 		allowsMap := map[string]bool{}
 		for _, allow := range allows {
 			allowsMap[allow] = true
 		}
+
+		// Cross domain
 		http.crossDomain(path.Path, allowsMap, router)
+		handlers = append(handlers, func(c *gin.Context) {
+			referer := c.Request.Referer()
+			if referer != "" {
+				if !IsAllowed(c, allowsMap) {
+					c.AbortWithStatus(403)
+					return
+				}
+
+				// url parse
+				url, _ := url.Parse(referer)
+				referer = fmt.Sprintf("%s://%s", url.Scheme, url.Host)
+				fmt.Println("referer is:", referer)
+				c.Writer.Header().Set("Access-Control-Allow-Origin", referer)
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+				c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+				c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+			}
+		})
 	}
 
 	// 中间件
@@ -193,7 +245,7 @@ func (http HTTP) guard(handlers *[]gin.HandlerFunc, guard string, defaults strin
 			if handler, has := HTTPGuards[name]; has {
 				*handlers = append(*handlers, handler)
 			} else { // run process process
-				*handlers = append(*handlers, processGuard(name))
+				*handlers = append(*handlers, ProcessGuard(name))
 			}
 		}
 	}
@@ -202,15 +254,22 @@ func (http HTTP) guard(handlers *[]gin.HandlerFunc, guard string, defaults strin
 // crossDomain 跨域许可
 func (http HTTP) crossDomain(path string, allows map[string]bool, router gin.IRoutes) {
 	http.method("OPTIONS", path, router, func(c *gin.Context) {
-		if _, has := allows[c.Request.Host]; !has {
-			c.AbortWithStatus(403)
-			return
+		referer := c.Request.Referer()
+		if referer != "" {
+			if !IsAllowed(c, allows) {
+				c.AbortWithStatus(403)
+				return
+			}
+
+			// url parse
+			url, _ := url.Parse(referer)
+			referer = fmt.Sprintf("%s://%s", url.Scheme, url.Host)
+			c.Writer.Header().Set("Access-Control-Allow-Origin", referer)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+			c.AbortWithStatus(204)
 		}
-		c.Writer.Header().Set("Access-Control-Allow-Origin", c.Request.Host)
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
-		c.AbortWithStatus(204)
 	})
 }
 
