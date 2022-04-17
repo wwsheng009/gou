@@ -334,6 +334,13 @@ func (http HTTP) parseIn(in []string) func(c *gin.Context) []interface{} {
 				return URLToQueryParam(values)
 			})
 			continue
+		} else if v == ":ip" {
+			getValues = append(getValues, func(c *gin.Context) interface{} {
+				addr := c.Request.RemoteAddr
+				addr_host := strings.Split(addr, ":")
+				return addr_host[0]
+			})
+			continue
 		} else if v == ":context" {
 			getValues = append(getValues, func(c *gin.Context) interface{} {
 				return c
