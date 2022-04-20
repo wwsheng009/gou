@@ -86,6 +86,9 @@ func (mod *Model) Create(row maps.MapStrAny) (int, error) {
 
 	if mod.MetaData.Option.Timestamps {
 		row.Set("created_at", dbal.Raw("CURRENT_TIMESTAMP"))
+		if mod.Driver == "sqlite3" {
+			row.Set("created_at", dbal.Raw("datetime('now','localtime')"))
+		}
 	}
 
 	id, err := capsule.Query().
@@ -120,6 +123,9 @@ func (mod *Model) Update(id interface{}, row maps.MapStrAny) error {
 
 	if mod.MetaData.Option.Timestamps {
 		row.Set("updated_at", dbal.Raw("CURRENT_TIMESTAMP"))
+		if mod.Driver == "sqlite3" {
+			row.Set("updated_at", dbal.Raw("datetime('now','localtime')"))
+		}
 	}
 
 	effect, err := capsule.Query().
@@ -158,6 +164,9 @@ func (mod *Model) Save(row maps.MapStrAny) (int, error) {
 
 		if mod.MetaData.Option.Timestamps {
 			row.Set("updated_at", dbal.Raw("CURRENT_TIMESTAMP"))
+			if mod.Driver == "sqlite3" {
+				row.Set("updated_at", dbal.Raw("datetime('now','localtime')"))
+			}
 			row.Del("deleted_at") // 忽略删除字段
 			row.Del("created_at") // 忽略创建字段
 		}
@@ -179,6 +188,9 @@ func (mod *Model) Save(row maps.MapStrAny) (int, error) {
 	// 创建
 	if mod.MetaData.Option.Timestamps {
 		row.Set("created_at", dbal.Raw("CURRENT_TIMESTAMP"))
+		if mod.Driver == "sqlite3" {
+			row.Set("created_at", dbal.Raw("datetime('now','localtime')"))
+		}
 		row.Del("deleted_at") // 忽略删除字段
 		row.Del("updated_at") // 忽略更新字段
 	}
@@ -285,7 +297,11 @@ func (mod *Model) Insert(columns []string, rows [][]interface{}) error {
 	if mod.MetaData.Option.Timestamps {
 		columns = append(columns, "created_at")
 		for i := range rows {
-			rows[i] = append(rows[i], dbal.Raw("CURRENT_TIMESTAMP"))
+			if mod.Driver == "sqlite3" {
+				rows[i] = append(rows[i], dbal.Raw("datetime('now','localtime')"))
+			} else {
+				rows[i] = append(rows[i], dbal.Raw("CURRENT_TIMESTAMP"))
+			}
 		}
 	}
 
@@ -316,6 +332,9 @@ func (mod *Model) UpdateWhere(param QueryParam, row maps.MapStrAny) (int, error)
 
 	if mod.MetaData.Option.Timestamps {
 		row.Set("updated_at", dbal.Raw("CURRENT_TIMESTAMP"))
+		if mod.Driver == "sqlite3" {
+			row.Set("updated_at", dbal.Raw("datetime('now','localtime')"))
+		}
 	}
 
 	// 如果不是 SQLite3 添加字段
@@ -401,6 +420,9 @@ func (mod *Model) DeleteWhere(param QueryParam) (int, error) {
 		field := fmt.Sprintf("%s.%s", mod.MetaData.Table.Name, "deleted_at")
 		// data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
 		data[field] = dbal.Raw("CURRENT_TIMESTAMP")
+		if mod.Driver == "sqlite3" {
+			data[field] = dbal.Raw("datetime('now','localtime')")
+		}
 		effect, err := qb.Update(data)
 		if err != nil {
 			return 0, err
@@ -449,6 +471,9 @@ func (mod *Model) hdbDeleteWhere(param QueryParam) (int, error) {
 	field := fmt.Sprintf("%s.%s", mod.MetaData.Table.Name, "deleted_at")
 	// data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
 	data[field] = dbal.Raw("CURRENT_TIMESTAMP")
+	if mod.Driver == "sqlite3" {
+		data[field] = dbal.Raw("datetime('now','localtime')")
+	}
 	effect, err := qb.Update(data)
 	if err != nil {
 		return 0, err
@@ -466,6 +491,9 @@ func (mod *Model) sqlite3DeleteWhere(param QueryParam) (int, error) {
 	// 删除数据
 	// field := fmt.Sprintf("%s.%s", mod.MetaData.Table.Name, "deleted_at")
 	data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
+	if mod.Driver == "sqlite3" {
+		data["deleted_at"] = dbal.Raw("datetime('now','localtime')")
+	}
 	// data[field] = dbal.Raw("CURRENT_TIMESTAMP")
 	effect, err := qb.Update(data)
 	if err != nil {
