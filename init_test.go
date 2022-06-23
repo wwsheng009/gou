@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yaoapp/gou/query"
 	"github.com/yaoapp/gou/query/gou"
 	"github.com/yaoapp/gou/runtime"
 	"github.com/yaoapp/kun/exception"
@@ -57,7 +58,7 @@ func TestMain(m *testing.M) {
 	TestScriptRoot = os.Getenv("GOU_TEST_SCRIPT_ROOT")
 	TestDriver = os.Getenv("GOU_TEST_DB_DRIVER")
 	TestDSN = os.Getenv("GOU_TEST_DSN")
-	TestAESKey = os.Getenv("GOT_TEST_AES_KEY")
+	TestAESKey = os.Getenv("GOU_TEST_AES_KEY")
 
 	// 数据库连接
 	switch TestDriver {
@@ -71,7 +72,7 @@ func TestMain(m *testing.M) {
 	SetModelLogger(os.Stdout, log.TraceLevel)
 
 	// 注册数据分析引擎
-	RegisterEngine("test-db", &gou.Query{
+	query.Register("test-db", &gou.Query{
 		Query: capsule.Query(),
 		GetTableName: func(s string) string {
 			if mod, has := Models[s]; has {
@@ -90,6 +91,7 @@ func TestMain(m *testing.M) {
 	LoadModel("file://"+path.Join(TestModRoot, "role.json"), "role")
 	LoadModel("file://"+path.Join(TestModRoot, "friends.json"), "friends")
 	LoadModel("file://"+path.Join(TestModRoot, "user_roles.json"), "user_roles")
+	LoadModel("file://"+path.Join(TestModRoot, "uimport.json"), "uimport")
 
 	// 加载插件
 	LoadPlugin(path.Join(TestPLGRoot, "user"), "user")

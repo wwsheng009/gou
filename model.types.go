@@ -35,6 +35,7 @@ type Model struct {
 // MetaData 元数据
 type MetaData struct {
 	Name      string              `json:"name,omitempty"`      // 元数据名称
+	Connector string              `json:"connector,omitempty"` // Bind a connector, MySQL, SQLite, Postgres, Clickhouse, Tidb, Oracle support. default is SQLite
 	Table     Table               `json:"table,omitempty"`     // 数据表选项
 	Columns   []Column            `json:"columns,omitempty"`   // 字段定义
 	Indexes   []Index             `json:"indexes,omitempty"`   // 索引定义
@@ -92,7 +93,8 @@ type Index struct {
 
 // Table the model mapping table in DB
 type Table struct {
-	Name        string   `json:"name"`
+	Name        string   `json:"name,omitempty"`   // optional, if not set, the default is generate from model name. eg name.space.user, table name is name_space_user
+	Prefix      string   `json:"prefix,omitempty"` // optional, the table prefix
 	Comment     string   `json:"comment,omitempty"`
 	Engine      string   `json:"engine,omitempty"` // InnoDB,MyISAM ( MySQL Only )
 	Collation   string   `json:"collation"`
@@ -119,6 +121,7 @@ type Option struct {
 	Constraints bool `json:"constraints,omitempty"`  // + 约束定义
 	Permission  bool `json:"permission,omitempty"`   // + __permission 字段
 	Logging     bool `json:"logging,omitempty"`      // + __logging_id 字段
+	Readonly    bool `json:"read_only,omitempty"`    // Ignore the migrate operation
 }
 
 // ColumnMap ColumnMap 字段映射
@@ -126,4 +129,11 @@ type ColumnMap struct {
 	Column *Column
 	Model  *Model
 	Export string // 取值时的变量名
+}
+
+// ExportData the export data struct
+type ExportData struct {
+	Model   string          `json:"model"`
+	Columns []string        `json:"columns"`
+	Values  [][]interface{} `json:"values"`
 }

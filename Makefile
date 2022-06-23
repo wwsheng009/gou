@@ -5,7 +5,7 @@ VETPACKAGES ?= $(shell $(GO) list ./... | grep -v /examples/)
 GOFILES := $(shell find . -name "*.go")
 
 # ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-TESTFOLDER := $(shell $(GO) list ./... | grep -E './gou$$|./query$$|./session$$|./objects$$|./values$$|./kv' | grep -v examples)
+TESTFOLDER := $(shell $(GO) list ./... | grep -E './gou$$|./query$$|./session$$|./objects$$|./values$$|./kv|./dsl|./encoding|./dns' | grep -v examples)
 TESTTAGS ?= ""
 
 .PHONY: test
@@ -72,8 +72,8 @@ misspell:
 
 .PHONY: tools
 tools:
-	go install golang.org/x/lint/golint; \
-	go install github.com/client9/misspell/cmd/misspell;
+	go install golang.org/x/lint/golint@latest; \
+	go install github.com/client9/misspell/cmd/misspell@latest;
 
 .PHONY: plugin
 plugin: 
