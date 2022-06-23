@@ -20,7 +20,7 @@ require (
 	github.com/ugorji/go v1.2.6 // indirect
 	github.com/yaoapp/kun v0.9.0
 	github.com/yaoapp/xun v0.0.0-00010101000000-000000000000
-	golang.org/x/crypto v0.0.0-20220208050332-20e1d8d225ab
+	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
 	golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9 // indirect
 	rogchap.com/v8go v0.7.0
 )
