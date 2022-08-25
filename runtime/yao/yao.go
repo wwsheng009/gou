@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/yaoapp/gou/lang"
 	"github.com/yaoapp/gou/runtime/yao/bridge"
 	"github.com/yaoapp/gou/runtime/yao/objects"
+	"github.com/yaoapp/gou/runtime/yao/values"
 	"github.com/yaoapp/kun/log"
-	"github.com/yaoapp/kun/utils"
 	"rogchap.com/v8go"
 	v8 "rogchap.com/v8go"
 )
@@ -29,7 +29,7 @@ func New(numOfContexts int) *Yao {
 		numOfContexts:   numOfContexts,
 	}
 
-	yao.template.Set("fetch", v8.NewFunctionTemplate(yao.iso, yao.jsFetch))
+	yao.template.Set("LL", v8.NewFunctionTemplate(yao.iso, yao.jsLang))
 	yao.AddObjectTemplate("log", objects.NewLog().ExportObject(yao.iso))
 	yao.AddFunctionTemplates(map[string]*v8.FunctionTemplate{
 		"Exception": objects.NewException().ExportFunction(yao.iso),
@@ -59,6 +59,7 @@ func (yao *Yao) Load(filename string, name string) error {
 	}
 	file, err := os.Open(filename)
 	if err != nil {
+		log.Error("[Runtime] load %s %s error: %s", filename, name, err.Error())
 		return err
 	}
 	defer file.Close()
@@ -86,7 +87,10 @@ func (yao *Yao) LoadReader(reader io.Reader, name string, filename ...string) er
 
 	// opt
 	ctx := v8.NewContext(yao.iso, yao.template)
-	ctx.RunScript(code, scriptfile)
+	_, err = ctx.RunScript(code, scriptfile)
+	if err != nil {
+		return err
+	}
 
 	yao.scripts[name] = script{
 		name:     name,
@@ -126,6 +130,10 @@ func (yao *Yao) Call(data map[string]interface{}, name string, method string, ar
 	}
 
 	// set global data
+	if data == nil {
+		data = map[string]interface{}{}
+	}
+
 	for key, val := range data {
 		global.Set(key, bridge.MustAnyToValue(v8ctx, val))
 	}
@@ -137,7 +145,7 @@ func (yao *Yao) Call(data map[string]interface{}, name string, method string, ar
 	}
 
 	if !global.Has(method) {
-		return nil, fmt.Errorf("global %s", method)
+		return nil, fmt.Errorf("function %s does not exists", method)
 	}
 
 	jsArgs, err := bridge.ArrayToValuers(v8ctx, args)
@@ -220,21 +228,47 @@ func (yao *Yao) AddFunctionTemplates(tmpls map[string]*v8go.FunctionTemplate) er
 	return nil
 }
 
-func (yao *Yao) jsLog(info *v8.FunctionCallbackInfo) *v8.Value {
-	values := bridge.ValuesToArray(info.Args())
-	utils.Dump(values)
-	return nil
+func (yao *Yao) jsLang(info *v8.FunctionCallbackInfo) *v8.Value {
+	args := info.Args()
+	if len(args) == 0 {
+		return v8.Undefined(info.Context().Isolate())
+	}
+
+	if !args[0].IsString() {
+		return args[0]
+	}
+
+	value := args[0].String()
+	lang.Replace(&value)
+
+	iso := info.Context().Isolate()
+	v, err := v8.NewValue(iso, value)
+	if err != nil {
+		return iso.ThrowException(values.Error(info.Context(), err.Error()))
+	}
+
+	return v
 }
 
-func (yao *Yao) jsFetch(info *v8.FunctionCallbackInfo) *v8.Value {
-	args := info.Args()
-	url := args[0].String()
-	resolver, _ := v8.NewPromiseResolver(info.Context())
-	go func() {
-		res, _ := http.Get(url)
-		body, _ := ioutil.ReadAll(res.Body)
-		val, _ := v8.NewValue(yao.iso, string(body))
-		resolver.Resolve(val)
-	}()
-	return resolver.GetPromise().Value
-}
+// func (yao *Yao) jsLog(info *v8.FunctionCallbackInfo) *v8.Value {
+// 	values := bridge.ValuesToArray(info.Args())
+// 	utils.Dump(values)
+// 	return nil
+// }
+
+// func (yao *Yao) jsFetch(info *v8.FunctionCallbackInfo) *v8.Value {
+// 	args := info.Args()
+// 	url := args[0].String()
+// 	resolver, _ := v8.NewPromiseResolver(info.Context())
+// 	go func() {
+// 		res, _ := http.Get(url)
+// 		if res.Body == nil {
+// 			resolver.Resolve(v8.Undefined(yao.iso))
+// 			return
+// 		}
+// 		body, _ := ioutil.ReadAll(res.Body)
+// 		val, _ := v8.NewValue(yao.iso, string(body))
+// 		resolver.Resolve(val)
+// 	}()
+// 	return resolver.GetPromise().Value
+// }

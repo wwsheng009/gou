@@ -37,7 +37,7 @@ var TestYao = runtime.Yao(1024).
 		return map[string]interface{}{"global": global, "sid": sid, "args": args}
 	}).
 	AddObject("console", map[string]func(global map[string]interface{}, sid string, args ...interface{}) interface{}{
-		"log": func(global map[string]interface{}, sid string, args ...interface{}) interface{} {
+		"log": func(_ map[string]interface{}, _ string, args ...interface{}) interface{} {
 			utils.Dump(args)
 			return nil
 		},
@@ -119,9 +119,6 @@ func TestMain(m *testing.M) {
 
 	LoadFlow("file://"+path.Join(TestFLWRoot, "user", "info.flow.json"), "user.info").
 		LoadScript("file://"+path.Join(TestFLWRoot, "user", "info.data.js"), "data")
-
-	LoadFlow("file://"+path.Join(TestFLWRoot, "rfid", "read.flow.json"), "rfid.read").
-		LoadScript("file://"+path.Join(TestFLWRoot, "rfid", "read.print.js"), "print")
 
 	// 加密密钥
 	LoadCrypt(fmt.Sprintf(`{"key":"%s"}`, TestAESKey), "AES")

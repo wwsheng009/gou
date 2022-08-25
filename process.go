@@ -76,7 +76,7 @@ func (process *Process) make() (err error) {
 func (process *Process) extraProcess() {
 	namer := strings.Split(process.Name, ".")
 	last := len(namer) - 1
-	if last < 2 && namer[0] != "flows" && namer[0] != "session" {
+	if last < 2 && namer[0] != "flows" && namer[0] != "session" && namer[0] != "ssl" && namer[0] != "websocket" {
 		exception.New("Process:%s format error", 400, process.Name).Throw()
 	}
 
@@ -112,6 +112,46 @@ func (process *Process) extraProcess() {
 		handler, has := StoreHandlers[process.Method]
 		if !has {
 			exception.New("Store: %s %s does not exist", 404, process.Name, process.Method).Throw()
+		}
+		process.Handler = handler
+		return
+	case "widgets":
+
+		if widgetHanlders, has := WidgetCustomHandlers[strings.ToLower(process.Class)]; has {
+			if handler, has := widgetHanlders[strings.ToLower(process.Method)]; has {
+				process.Name = strings.ToLower(process.Name)
+				process.Handler = handler
+				return
+			}
+		}
+		process.Name = strings.ToLower(process.Name)
+		handler, has := WidgetHandlers[strings.ToLower(process.Method)]
+		if !has {
+			exception.New("Widget: %s %s does not exist", 404, process.Name, process.Method).Throw()
+		}
+		process.Handler = handler
+		return
+	case "schemas":
+		process.Name = strings.ToLower(process.Name)
+		handler, has := SchemaHandlers[process.Method]
+		if !has {
+			exception.New("Schema: %s %s does not exist", 404, process.Name, process.Method).Throw()
+		}
+		process.Handler = handler
+		return
+	case "tasks":
+		process.Name = strings.ToLower(process.Name)
+		handler, has := TaskHandlers[process.Method]
+		if !has {
+			exception.New("Task: %s %s does not exist", 404, process.Name, process.Method).Throw()
+		}
+		process.Handler = handler
+		return
+	case "schedules":
+		process.Name = strings.ToLower(process.Name)
+		handler, has := ScheduleHandlers[process.Method]
+		if !has {
+			exception.New("Schedule: %s %s does not exist", 404, process.Name, process.Method).Throw()
 		}
 		process.Handler = handler
 		return

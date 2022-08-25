@@ -14,12 +14,14 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/json-iterator/go v1.1.12
 	github.com/miekg/dns v1.1.48
+	github.com/robfig/cron/v3 v3.0.0
 	github.com/stretchr/testify v1.7.1
 	github.com/takama/daemon v1.0.0
 	github.com/tidwall/buntdb v1.2.9
 	github.com/yaoapp/kun v0.9.0
 	github.com/yaoapp/xun v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
+	gopkg.in/yaml.v3 v3.0.0
 	rogchap.com/v8go v0.7.0
 )
 
@@ -69,7 +71,6 @@ require (
 	google.golang.org/grpc v1.46.2 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0 // indirect
 )
 
 replace github.com/yaoapp/kun => ../kun

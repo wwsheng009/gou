@@ -2,13 +2,15 @@ package gou
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/yaoapp/gou/lang"
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/maps"
-	"github.com/yaoapp/kun/utils"
 	"github.com/yaoapp/xun/capsule"
 )
 
@@ -28,9 +30,11 @@ func TestModelReload(t *testing.T) {
 }
 
 func TestModelMigrate(t *testing.T) {
-	for name, mod := range Models {
-		utils.Dump(name)
-		mod.Migrate(true)
+	for _, mod := range Models {
+		err := mod.Migrate(true)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -490,8 +494,11 @@ func TestModelExportImport(t *testing.T) {
 	}
 
 	user := Select("uimport")
-	user.Migrate(true)
-	err := user.Insert(columns, rows)
+	err := user.Migrate(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = user.Insert(columns, rows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,4 +527,27 @@ func TestModelExportImport(t *testing.T) {
 		},
 	})
 	assert.Equal(t, 3, len(res))
+}
+
+func TestModelLang(t *testing.T) {
+	root := os.Getenv("GOU_TEST_APP_ROOT")
+	rootLang := filepath.Join(root, "langs")
+	err := lang.Load(rootLang)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	modelFile := filepath.Join(root, "models", "demo.mod.json")
+	mod := LoadModel(fmt.Sprintf("file://%s", modelFile), "demo")
+	dict := lang.Pick("zh-cn")
+	dict.Apply(mod)
+	assert.Equal(t, mod.MetaData.Name, "演示")
+	assert.Equal(t, mod.Columns["action"].Label, "动作")
+
+	// Reload
+	mod.Reload()
+	dict = lang.Pick("zh-hk")
+	dict.Apply(mod)
+	assert.Equal(t, mod.MetaData.Name, "演示")
+	assert.Equal(t, mod.Columns["action"].Label, "動作")
 }
