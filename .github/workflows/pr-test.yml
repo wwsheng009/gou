@@ -1,0 +1,224 @@
+name: Comment on the pull request
+
+# read-write repo token
+# access to secrets
+on:
+  workflow_run:
+    workflows: ["Receive PR"]
+    types:
+      - completed
+
+env:
+  GOU_TEST_AES_KEY: "^*aNBue!loLTTiP*4i&BSK7s#QRbe0^g"
+  GOU_TEST_REDIS_HOST: "127.0.0.1"
+  GOU_TEST_REDIS_PORT: "6379"
+  GOU_TEST_GITHUB_TOKEN: ${{ secrets.GOU_TEST_GITHUB_TOKEN }}
+  GOU_TEST_GITHUB_REPO: github.com/YaoApp/workshop-tests-private
+  GOU_TEST_DSL_TABLE_NAME: test_env
+  SEND_MAIL_WORKER_NUMS: 2
+  SEND_MAIL_TEST_MAIL: max@iqka.com
+
+  MYSQL_TEST_HOST: "127.0.0.1"
+  MYSQL_TEST_PORT: "3308"
+  MYSQL_TEST_USER: test
+  MYSQL_TEST_PASS: "123456"
+
+  SQLITE_DB: "./app/db/yao.db"
+
+  REDIS_TEST_HOST: "127.0.0.1"
+  REDIS_TEST_PORT: "6379"
+  REDIS_TEST_DB: "2"
+
+  MONGO_TEST_HOST: "127.0.0.1"
+  MONGO_TEST_PORT: "27017"
+  MONGO_TEST_USER: "root"
+  MONGO_TEST_PASS: "123456"
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: [1.19.2]
+        db: [MySQL8.0, SQLite3]
+        redis: [4, 5, 6]
+        mongo: ["6.0"]
+    steps:
+      - name: "Download artifact"
+        uses: actions/github-script@v3.1.0
+        with:
+          script: |
+            var artifacts = await github.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "pr"
+            })[0];
+            var download = await github.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(download.data));
+
+      - name: "Read NR & SHA"
+        run: |
+          unzip pr.zip
+          cat NR
+          cat SHA
+          echo HEAD=$(cat SHA) >> $GITHUB_ENV
+          echo NR=$(cat NR) >> $GITHUB_ENV
+
+      - name: "Comment on PR"
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { NR } = process.env
+            var fs = require('fs');
+            var issue_number = NR;
+            await github.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue_number,
+              body: 'Thank you for the PR! The test workflow ( GO:${{ matrix.go }} DB:${{ matrix.db }} Redis:${{ matrix.redis }} ) is running, the results of the run will be commented later.'
+            });
+
+      - name: Setup Cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Checkout Kun
+        uses: actions/checkout@v2
+        with:
+          repository: yaoapp/kun
+          path: kun
+
+      - name: Checkout Xun
+        uses: actions/checkout@v2
+        with:
+          repository: yaoapp/xun
+          path: xun
+
+      - name: Checkout V8Go
+        uses: actions/checkout@v2
+        with:
+          repository: rogchap/v8go
+          ref: 5e91d3d9dcabd2986f901b6b31590e49fc3c4dd8
+          path: v8go
+
+      - name: Checkout Demo WMS
+        uses: actions/checkout@v2
+        with:
+          repository: yaoapp/demo-wms
+          path: demo-wms
+
+      - name: Move Kun, Xun, V8go
+        run: |
+          mv kun ../
+          mv xun ../
+          mv v8go ../
+          mv demo-wms ../
+          ls -l .
+          ls -l ../
+
+      - name: Checkout pull request HEAD commit
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ env.HEAD }}
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.4.0
+        with:
+          redis-version: ${{ matrix.redis }}
+
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.8.0
+        with:
+          mongodb-version: ${{ matrix.mongo }}
+          mongodb-username: root
+          mongodb-password: 123456
+          mongodb-db: test
+
+      - name: Setup MySQL8.0 (connector)
+        uses: ./.github/actions/setup-db
+        with:
+          kind: "MySQL8.0"
+          db: "test"
+          user: "test"
+          password: "123456"
+          port: "3308"
+
+      - name: Setup ${{ matrix.db }}
+        uses: ./.github/actions/setup-db
+        with:
+          kind: "${{ matrix.db }}"
+          db: "gou"
+          user: "gou"
+          password: "123456"
+
+      - name: Setup Go ${{ matrix.go }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Setup Go Tools
+        run: |
+          make tools
+
+      - name: Setup ENV
+        run: |
+          echo "GOU_TEST_DSN=$DSN" >> $GITHUB_ENV
+          echo "GOU_TEST_DB_DRIVER=$DB_DRIVER" >> $GITHUB_ENV
+          echo "GOU_TEST_API_ROOT=$GITHUB_WORKSPACE/app/apis" >> $GITHUB_ENV
+          echo "GOU_TEST_FLW_ROOT=$GITHUB_WORKSPACE/app/flows" >> $GITHUB_ENV
+          echo "GOU_TEST_MOD_ROOT=$GITHUB_WORKSPACE/app/models" >> $GITHUB_ENV
+          echo "GOU_TEST_PLG_ROOT=$HOME/data/gou-unit/plugins" >> $GITHUB_ENV
+          echo "GOU_TEST_SCRIPT_ROOT=$GITHUB_WORKSPACE/app/scripts" >> $GITHUB_ENV
+          echo "GOU_TEST_QUERY_ROOT=$GITHUB_WORKSPACE/query/assets" >> $GITHUB_ENV
+          echo "GOU_TEST_PLG_LOG=$HOME/data/gou-unit/logs" >> $GITHUB_ENV
+          echo "GOU_TEST_APP_ROOT=$GITHUB_WORKSPACE/tests/app" >> $GITHUB_ENV
+          echo "YAO_PATH=$GITHUB_WORKSPACE/tests/yao" >> $GITHUB_ENV
+          mkdir -p $HOME/.yao
+          echo ${{ secrets.GOU_TEST_GITHUB_TOKEN }} > $HOME/.yao/github_token
+          chmod 600 $HOME/.yao/github_token
+          ls -l $HOME/.yao/github_token
+
+      - name: Run Test
+        run: |
+          make vet
+          make fmt-check
+          make misspell-check
+          make plugin
+          make migrate
+          make test
+
+      - name: Codecov Report
+        uses: codecov/codecov-action@v2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+
+      - name: "Comment on PR"
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { NR } = process.env
+            var fs = require('fs');
+            var issue_number = NR;
+            await github.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue_number,
+              body: '✨DONE✨ GO:${{ matrix.go }} DB:${{ matrix.db }} Redis:${{ matrix.redis }} passed.'
+            });

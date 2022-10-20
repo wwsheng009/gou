@@ -4,16 +4,13 @@ package lang
 type Dict struct {
 	Name    string
 	Global  Words
-	Widgets map[string]Widget
+	Widgets map[string]Words
 }
-
-// Widget the widget instance language words
-type Widget map[string]Words
 
 // Words the language words
 type Words map[string]string
 
 // Lang the language interface
 type Lang interface {
-	Lang(trans func(widget string, inst string, value *string) bool)
+	Lang(trans func(widgetName string, inst string, value *string) bool)
 }

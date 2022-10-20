@@ -25,17 +25,19 @@ func New(numOfContexts int) *Yao {
 		iso:             iso,
 		template:        global,
 		scripts:         map[string]script{},
+		rootScripts:     map[string]script{},
 		objectTemplates: map[string]*v8.ObjectTemplate{},
 		numOfContexts:   numOfContexts,
 	}
 
-	yao.template.Set("LL", v8.NewFunctionTemplate(yao.iso, yao.jsLang))
+	yao.template.Set("$L", v8.NewFunctionTemplate(yao.iso, yao.jsLang))
 	yao.AddObjectTemplate("log", objects.NewLog().ExportObject(yao.iso))
 	yao.AddFunctionTemplates(map[string]*v8.FunctionTemplate{
 		"Exception": objects.NewException().ExportFunction(yao.iso),
 		"WebSocket": objects.NewWebSocket().ExportFunction(yao.iso),
 		"Store":     objects.NewStore().ExportFunction(yao.iso),
 		"Query":     objects.NewQuery().ExportFunction(yao.iso),
+		"FS":        objects.NewFS().ExportFunction(yao.iso),
 	})
 	return yao
 }
@@ -66,8 +68,33 @@ func (yao *Yao) Load(filename string, name string) error {
 	return yao.LoadReader(file, name, filename)
 }
 
+// RootLoad load and compile script
+func (yao *Yao) RootLoad(filename string, name string) error {
+	filename, err := filepath.Abs(filename)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Error("[Runtime] load %s %s error: %s", filename, name, err.Error())
+		return err
+	}
+	defer file.Close()
+	return yao.RootLoadReader(file, name, filename)
+}
+
+// RootLoadReader load and compile script
+func (yao *Yao) RootLoadReader(reader io.Reader, name string, filename ...string) error {
+	return yao.loadReader(yao.rootScripts, true, reader, name, filename...)
+}
+
 // LoadReader load and compile script
 func (yao *Yao) LoadReader(reader io.Reader, name string, filename ...string) error {
+	return yao.loadReader(yao.scripts, false, reader, name, filename...)
+}
+
+// LoadReader load and compile script
+func (yao *Yao) loadReader(scripts map[string]script, isroot bool, reader io.Reader, name string, filename ...string) error {
 	source, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return err
@@ -92,11 +119,12 @@ func (yao *Yao) LoadReader(reader io.Reader, name string, filename ...string) er
 		return err
 	}
 
-	yao.scripts[name] = script{
+	scripts[name] = script{
 		name:     name,
 		filename: scriptfile,
 		source:   code,
-		ctx:      ctx,
+		Ctx:      ctx,
+		IsRoot:   isroot,
 		// compiled: compiled,
 	}
 	return nil
@@ -108,9 +136,30 @@ func (yao *Yao) Call(data map[string]interface{}, name string, method string, ar
 	if !has {
 		return nil, fmt.Errorf("The %s does not loaded (%d)", name, len(yao.scripts))
 	}
+	return yao.call(script, data, name, method, args...)
+}
+
+// RootCall cal javascript function
+func (yao *Yao) RootCall(data map[string]interface{}, name string, method string, args ...interface{}) (interface{}, error) {
+
+	script, has := yao.rootScripts[name]
+	if has {
+		return yao.call(script, data, name, method, args...)
+	}
+
+	script, has = yao.scripts[name]
+	if has {
+		return yao.call(script, data, name, method, args...)
+	}
+
+	return nil, fmt.Errorf("The %s does not loaded (%d)", name, len(yao.scripts))
+}
+
+// Call cal javascript function
+func (yao *Yao) call(script script, data map[string]interface{}, name string, method string, args ...interface{}) (interface{}, error) {
 
 	var err error
-	v8ctx := script.ctx
+	v8ctx := script.Ctx
 	// v8ctx, err := yao.contexts.Make(func() *v8.Context { return v8.NewContext(yao.iso, yao.template) })
 	// if err != nil {
 	// 	return nil, err
@@ -128,6 +177,9 @@ func (yao *Yao) Call(data map[string]interface{}, name string, method string, ar
 	if global == nil {
 		return nil, fmt.Errorf("global is nil")
 	}
+
+	// set as
+	global.Set("__YAO_SU_ROOT", script.IsRoot)
 
 	// set global data
 	if data == nil {
@@ -186,6 +238,38 @@ func (yao *Yao) AddFunction(name string, fn func(global map[string]interface{}, 
 	jsFun := yao.goFunTemplate(fn)
 	yao.template.Set(name, jsFun)
 	return nil
+}
+
+// AddRootFunction add a global function ( root only)
+func (yao *Yao) AddRootFunction(name string, fn func(global map[string]interface{}, sid string, args ...interface{}) interface{}) error {
+	jsFun := yao.goFunTemplateRoot(fn)
+	yao.template.Set(name, jsFun)
+	return nil
+}
+
+func (yao *Yao) goFunTemplateRoot(fn func(global map[string]interface{}, sid string, args ...interface{}) interface{}) *v8.FunctionTemplate {
+	return v8.NewFunctionTemplate(yao.iso, func(info *v8.FunctionCallbackInfo) *v8.Value {
+
+		v, err := info.Context().Global().Get("__YAO_SU_ROOT")
+		if err != nil {
+			return info.Context().Isolate().ThrowException(values.Error(info.Context(), err.Error()))
+		}
+
+		if !v.Boolean() {
+			return info.Context().Isolate().ThrowException(values.Error(info.Context(), "function is not allowed"))
+		}
+
+		global := map[string]interface{}{}
+		jsGlobal, _ := info.Context().Global().Get("__yao_global")
+		anyGlobal, _ := bridge.ToInterface(jsGlobal)
+		if iGlobal, ok := anyGlobal.(map[string]interface{}); ok {
+			global = iGlobal
+		}
+		jsSid, _ := info.Context().Global().Get("__yao_sid")
+		args := bridge.ValuesToArray(info.Args())
+		res := fn(global, jsSid.String(), args...)
+		return bridge.MustAnyToValue(info.Context(), res)
+	})
 }
 
 func (yao *Yao) goFunTemplate(fn func(global map[string]interface{}, sid string, args ...interface{}) interface{}) *v8.FunctionTemplate {

@@ -30,6 +30,16 @@ func (runtime *Runtime) LoadReader(reader io.Reader, name string, filename ...st
 	return runtime.Engine.LoadReader(reader, name, filename...)
 }
 
+// RootLoad load and compile script root mode
+func (runtime *Runtime) RootLoad(filename string, name string) error {
+	return runtime.Engine.RootLoad(filename, name)
+}
+
+// RootReader load and compile script root mode
+func (runtime *Runtime) RootReader(reader io.Reader, name string, filename ...string) error {
+	return runtime.Engine.RootLoadReader(reader, name, filename...)
+}
+
 // Has check the given name of the script is load
 func (runtime *Runtime) Has(name string) bool {
 	return runtime.Engine.Has(name)
@@ -38,6 +48,15 @@ func (runtime *Runtime) Has(name string) bool {
 // AddFunction add a global JavaScript function
 func (runtime *Runtime) AddFunction(name string, fn func(global map[string]interface{}, sid string, args ...interface{}) interface{}) *Runtime {
 	err := runtime.Engine.AddFunction(name, fn)
+	if err != nil {
+		exception.New("runtime AddFunction %s: %s", 500, name, err.Error()).Throw()
+	}
+	return runtime
+}
+
+// AddRootFunction add a global JavaScript function (root only)
+func (runtime *Runtime) AddRootFunction(name string, fn func(global map[string]interface{}, sid string, args ...interface{}) interface{}) *Runtime {
+	err := runtime.Engine.AddRootFunction(name, fn)
 	if err != nil {
 		exception.New("runtime AddFunction %s: %s", 500, name, err.Error()).Throw()
 	}
@@ -94,4 +113,13 @@ func (request *Request) Call(args ...interface{}) (interface{}, error) {
 		"__yao_sid":    request.sid,
 	}
 	return request.runtime.Engine.Call(data, request.name, request.method, args...)
+}
+
+// RootCall execute JavaScript function and return
+func (request *Request) RootCall(args ...interface{}) (interface{}, error) {
+	data := map[string]interface{}{
+		"__yao_global": request.global,
+		"__yao_sid":    request.sid,
+	}
+	return request.runtime.Engine.RootCall(data, request.name, request.method, args...)
 }

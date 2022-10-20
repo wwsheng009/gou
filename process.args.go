@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/yaoapp/gou/query/share"
+	"github.com/yaoapp/gou/session"
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/maps"
@@ -79,7 +80,7 @@ func (process *Process) ArgsQueryParams(i int, defaults ...QueryParam) QueryPara
 		param = defaults[0]
 	}
 
-	if process.Args[i] == nil || len(process.Args) <= i {
+	if len(process.Args) <= i || process.Args[i] == nil {
 		return param
 	}
 
@@ -99,7 +100,7 @@ func (process *Process) ArgsInt(i int, defaults ...int) int {
 		value = defaults[0]
 	}
 
-	if process.Args[i] == nil || len(process.Args) <= i {
+	if len(process.Args) <= i || process.Args[i] == nil {
 		return value
 	}
 
@@ -125,7 +126,7 @@ func (process *Process) ArgsString(i int, defaults ...string) string {
 		value = defaults[0]
 	}
 
-	if process.Args[i] == nil || len(process.Args) <= i {
+	if len(process.Args) <= i || process.Args[i] == nil {
 		return value
 	}
 
@@ -175,7 +176,7 @@ func (process *Process) ArgsBool(i int, defaults ...bool) bool {
 		value = defaults[0]
 	}
 
-	if process.Args[i] == nil || len(process.Args) <= i {
+	if len(process.Args) <= i || process.Args[i] == nil {
 		return value
 	}
 
@@ -258,4 +259,26 @@ func (process *Process) ArgsStrings(index int) []string {
 func (process *Process) ArgsArray(index int) []interface{} {
 	process.ValidateArgNums(index + 1)
 	return any.Of(process.Args[index]).CArray()
+}
+
+// Lang get lang
+func (process *Process) Lang(defaults ...string) string {
+	if process.Sid != "" {
+		ss := session.Global().ID(process.Sid)
+		v, _ := ss.Get("__yao_lang")
+		if len(defaults) > 0 && v == nil {
+			return defaults[0]
+		}
+
+		lang := ""
+		if v != nil {
+			lang = fmt.Sprintf("%v", v)
+		}
+		return lang
+	}
+
+	if len(defaults) > 0 {
+		return defaults[0]
+	}
+	return ""
 }

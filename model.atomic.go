@@ -7,6 +7,7 @@ import (
 
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
+	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/kun/maps"
 	"github.com/yaoapp/xun/capsule"
 	"github.com/yaoapp/xun/dbal"
@@ -79,6 +80,9 @@ func (mod *Model) Create(row maps.MapStrAny) (int, error) {
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error("[Model] %s Create %v", mod.ID, err)
+		}
 		exception.New("输入参数错误", 400).Ctx(errs).Throw()
 	}
 
@@ -116,6 +120,9 @@ func (mod *Model) Update(id interface{}, row maps.MapStrAny) error {
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error("[Model] %s Update %v", mod.ID, err)
+		}
 		exception.New("输入参数错误", 400).Ctx(errs).Throw()
 	}
 
@@ -157,6 +164,9 @@ func (mod *Model) Save(row maps.MapStrAny) (int, error) {
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error("[Model] %s Save %v", mod.ID, err)
+		}
 		exception.New("输入参数错误", 400).Ctx(errs).Throw()
 	}
 
@@ -293,6 +303,9 @@ func (mod *Model) Insert(columns []string, rows [][]interface{}) error {
 	}
 
 	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error("[Model] %s Insert %v", mod.ID, err)
+		}
 		exception.New("输入参数错误", 400).Ctx(errs).Throw()
 	}
 
