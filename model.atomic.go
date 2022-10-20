@@ -135,7 +135,7 @@ func (mod *Model) Update(id interface{}, row maps.MapStrAny) error {
 		Update(row)
 
 	if effect == 0 {
-		return fmt.Errorf("没有数据被更新")
+		return fmt.Errorf("没有数据被更新:%s", err.Error())
 	}
 
 	return err
