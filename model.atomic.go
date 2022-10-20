@@ -438,7 +438,7 @@ func (mod *Model) hdbDeleteWhere(param QueryParam) (int, error) {
 	for _, col := range mod.UniqueColumns {
 		typ := strings.ToLower(col.Type)
 		if typ == "string" {
-			data[col.Name] = dbal.Raw(fmt.Sprintf(fmt.Sprintf("'_' || '%d'", time.Now().UnixNano())))
+			data[col.Name] = dbal.Raw(fmt.Sprintf("'_' || '%d'", time.Now().UnixNano()))
 			columns = append(
 				columns,
 				fmt.Sprintf(`'%s'  || ':' || "%s"`, col.Name, col.Name),
