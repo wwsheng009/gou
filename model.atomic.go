@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/kun/maps"
@@ -29,7 +28,6 @@ func (mod *Model) Find(id interface{}, param QueryParam) (maps.MapStr, error) {
 		return nil, fmt.Errorf("ID=%v的数据不存在", id)
 	}
 	return res[0], nil
-
 }
 
 // MustFind 查询单条记录
@@ -80,10 +78,12 @@ func (mod *Model) Create(row maps.MapStrAny) (int, error) {
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
+		msgs := []string{}
 		for _, err := range errs {
+			msgs = append(msgs, err.Column, strings.Join(err.Messages, ";"))
 			log.Error("[Model] %s Create %v", mod.ID, err)
 		}
-		exception.New("输入参数错误", 400).Ctx(errs).Throw()
+		exception.New("输入参数错误\n %s", 400, strings.Join(msgs, "\n")).Ctx(errs).Throw()
 	}
 
 	mod.FliterIn(row) // 入库前输入数据预处理
@@ -120,10 +120,12 @@ func (mod *Model) Update(id interface{}, row maps.MapStrAny) error {
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
+		msgs := []string{}
 		for _, err := range errs {
+			msgs = append(msgs, err.Column, strings.Join(err.Messages, ";"))
 			log.Error("[Model] %s Update %v", mod.ID, err)
 		}
-		exception.New("输入参数错误", 400).Ctx(errs).Throw()
+		exception.New("输入参数错误\n %s", 400, strings.Join(msgs, "\n")).Ctx(errs).Throw()
 	}
 
 	mod.FliterIn(row) // 入库前输入数据预处理
@@ -160,14 +162,16 @@ func (mod *Model) MustUpdate(id interface{}, row maps.MapStrAny) {
 }
 
 // Save 保存单条数据, 不存在创建记录, 存在更新记录,  返回数据ID
-func (mod *Model) Save(row maps.MapStrAny) (int, error) {
+func (mod *Model) Save(row maps.MapStrAny) (interface{}, error) {
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
+		msgs := []string{}
 		for _, err := range errs {
+			msgs = append(msgs, err.Column, strings.Join(err.Messages, ";"))
 			log.Error("[Model] %s Save %v", mod.ID, err)
 		}
-		exception.New("输入参数错误", 400).Ctx(errs).Throw()
+		exception.New("输入参数错误\n %s", 400, strings.Join(msgs, "\n")).Ctx(errs).Throw()
 	}
 
 	mod.FliterIn(row) // 入库前输入数据预处理
@@ -195,7 +199,7 @@ func (mod *Model) Save(row maps.MapStrAny) (int, error) {
 			return 0, err
 		}
 
-		return any.Of(id).CInt(), nil
+		return id, nil
 	}
 
 	// 创建
@@ -216,11 +220,11 @@ func (mod *Model) Save(row maps.MapStrAny) (int, error) {
 		return 0, err
 	}
 
-	return int(id), err
+	return id, err
 }
 
 // MustSave 保存单条数据, 返回数据ID, 失败抛出异常
-func (mod *Model) MustSave(row maps.MapStrAny) int {
+func (mod *Model) MustSave(row maps.MapStrAny) interface{} {
 	id, err := mod.Save(row)
 	if err != nil {
 		exception.Err(err, 500).Throw()
@@ -252,7 +256,7 @@ func (mod *Model) MustDelete(id interface{}) {
 
 // Destroy 真删除单条记录
 func (mod *Model) Destroy(id interface{}) error {
-	_, err := capsule.Query().Table(mod.MetaData.Table.Name).Where("id", id).Limit(1).Delete()
+	_, err := capsule.Query().Table(mod.MetaData.Table.Name).Where(mod.PrimaryKey, id).Limit(1).Delete()
 	return err
 }
 
@@ -341,7 +345,12 @@ func (mod *Model) UpdateWhere(param QueryParam, row maps.MapStrAny) (int, error)
 
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
-		exception.New("输入参数错误", 400).Ctx(errs).Throw()
+		msgs := []string{}
+		for _, err := range errs {
+			msgs = append(msgs, err.Column, strings.Join(err.Messages, ";"))
+			log.Error("[Model] %s UpdateWhere %v", mod.ID, err)
+		}
+		exception.New("输入参数错误\n %s", 400, strings.Join(msgs, "\n")).Ctx(errs).Throw()
 	}
 
 	mod.FliterIn(row) // 入库前输入数据预处理
@@ -511,6 +520,14 @@ func (mod *Model) sqlite3DeleteWhere(param QueryParam) (int, error) {
 		data["deleted_at"] = dbal.Raw("datetime('now','localtime')")
 	}
 	// data[field] = dbal.Raw("CURRENT_TIMESTAMP")
+	// data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
+	for _, col := range mod.UniqueColumns {
+		typ := strings.ToLower(col.Type)
+		if typ == "string" {
+			data[col.Name] = dbal.Raw(fmt.Sprintf("'_' ||  %s  || '%d'", col.Name, time.Now().UnixNano()))
+		}
+	}
+
 	effect, err := qb.Update(data)
 	if err != nil {
 		return 0, err
@@ -551,9 +568,9 @@ func (mod *Model) MustDestroyWhere(param QueryParam) int {
 }
 
 // EachSave 批量保存数据, 返回数据ID集合
-func (mod *Model) EachSave(rows []map[string]interface{}, eachrow ...maps.MapStrAny) ([]int, error) {
+func (mod *Model) EachSave(rows []map[string]interface{}, eachrow ...maps.MapStrAny) ([]interface{}, error) {
 	messages := []string{}
-	ids := []int{}
+	ids := []interface{}{}
 	for i, row := range rows {
 
 		if len(eachrow) > 0 {
@@ -566,9 +583,23 @@ func (mod *Model) EachSave(rows []map[string]interface{}, eachrow ...maps.MapStr
 			}
 		}
 
+		// check primary
+		if id, has := row[mod.PrimaryKey]; has {
+			_, err := mod.Find(id, QueryParam{Select: []interface{}{mod.PrimaryKey}})
+			if err != nil { // id does not exists & create
+				_, err := mod.Create(row)
+				if err != nil {
+					messages = append(messages, fmt.Sprintf("rows[%d]: %s", i, err.Error()))
+					continue
+				}
+				ids = append(ids, id)
+				continue
+			}
+		}
+
 		id, err := mod.Save(row)
 		if err != nil {
-			messages = append(messages, fmt.Sprintf("第 %d 条: %s", i, err.Error()))
+			messages = append(messages, fmt.Sprintf("rows[%d]: %s", i, err.Error()))
 			continue
 		}
 		ids = append(ids, id)
@@ -581,7 +612,7 @@ func (mod *Model) EachSave(rows []map[string]interface{}, eachrow ...maps.MapStr
 }
 
 // MustEachSave 批量保存数据, 返回数据ID集合, 失败抛出异常
-func (mod *Model) MustEachSave(rows []map[string]interface{}, eachrow ...maps.MapStrAny) []int {
+func (mod *Model) MustEachSave(rows []map[string]interface{}, eachrow ...maps.MapStrAny) []interface{} {
 	ids, err := mod.EachSave(rows, eachrow...)
 	if err != nil {
 		exception.Err(err, 500).Throw()
