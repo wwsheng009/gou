@@ -1,7 +1,12 @@
 package gou
 
+import (
+	"net/textproto"
+)
+
 // API 数据接口
 type API struct {
+	ID     string `jsong:"id"`
 	Name   string
 	Source string
 	Type   string
@@ -32,9 +37,17 @@ type Path struct {
 
 // Out http 输出
 type Out struct {
-	Status  int               `json:"status"`
-	Type    string            `json:"type,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
+	Status   int               `json:"status"`
+	Type     string            `json:"type,omitempty"`
+	Body     interface{}       `json:"body,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
+	Redirect *Redirect         `json:"redirect,omitempty"`
+}
+
+// Redirect out redirect
+type Redirect struct {
+	Code     int    `json:"code,omitempty"`
+	Location string `json:"location,omitempty"`
 }
 
 // Server API 服务配置
@@ -44,4 +57,12 @@ type Server struct {
 	Host   string   `json:"host,omitempty"`
 	Root   string   `json:"root,omitempty"`   // API 根目录
 	Allows []string `json:"allows,omitempty"` // 许可跨域访问域名
+}
+
+// UploadFile upload file
+type UploadFile struct {
+	Name     string               `json:"name"`
+	TempFile string               `json:"tempFile"`
+	Size     int64                `json:"size"`
+	Header   textproto.MIMEHeader `json:"mimeType"`
 }

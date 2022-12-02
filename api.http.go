@@ -17,7 +17,6 @@ import (
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/maps"
-	"github.com/yaoapp/xun"
 )
 
 // HTTPGuards 支持的中间件
@@ -51,7 +50,13 @@ func ProcessGuard(name string) gin.HandlerFunc {
 			c.Request.Header,      // Request headers
 		}
 
-		var process = NewProcess(name, args...)
+		process, err := ProcessOf(name, args...)
+		if err != nil {
+			c.JSON(400, gin.H{"code": 400, "message": fmt.Sprintf("Guard: %s %s", name, err.Error())})
+			c.Abort()
+			return
+		}
+
 		if sid, has := c.Get("__sid"); has { // 设定会话ID
 			if sid, ok := sid.(string); ok {
 				process.WithSID(sid)
@@ -63,6 +68,7 @@ func ProcessGuard(name string) gin.HandlerFunc {
 				process.WithGlobal(global)
 			}
 		}
+
 		process.Run()
 	}
 }
@@ -207,8 +213,22 @@ func (http HTTP) Route(router gin.IRoutes, path Path, allows ...string) {
 			} else {
 				for name, value := range path.Out.Headers {
 					c.Writer.Header().Set(name, value)
+					if name == "Content-Type" {
+						contentType = value
+					}
 				}
 			}
+		}
+
+		// Redirect
+		if path.Out.Redirect != nil {
+			code := path.Out.Redirect.Code
+			if code == 0 {
+				code = 301
+			}
+			c.Redirect(code, path.Out.Redirect.Location)
+			c.Done()
+			return
 		}
 
 		if resp == nil {
@@ -216,16 +236,32 @@ func (http HTTP) Route(router gin.IRoutes, path Path, allows ...string) {
 			return
 		}
 
-		switch resp.(type) {
+		// Format Body
+		body := resp
+		if path.Out.Body != nil {
+			res := any.Of(resp)
+			if res.IsMap() {
+				data := res.Map().MapStrAny.Dot()
+				body = share.Bind(path.Out.Body, data)
+			}
+		}
+
+		switch data := body.(type) {
 		case maps.Map, map[string]interface{}, []interface{}, []maps.Map, []map[string]interface{}:
-			c.JSON(status, resp)
+			c.JSON(status, data)
 			c.Done()
 			return
+
+		case []byte:
+			c.Data(status, contentType, data)
+			c.Done()
+			return
+
 		default:
 			if contentType == "application/json" {
-				c.JSON(status, resp)
+				c.JSON(status, body)
 			} else {
-				c.String(status, "%v", resp)
+				c.String(status, "%v", body)
 			}
 			c.Done()
 			return
@@ -406,7 +442,7 @@ func (http HTTP) parseIn(in []string) func(c *gin.Context) []interface{} {
 				if err != nil {
 					exception.New("保存文件出错 %s", 500, err).Throw()
 				}
-				return xun.UploadFile{
+				return UploadFile{
 					Name:     file.Filename,
 					TempFile: tmpfile.Name(),
 					Size:     file.Size,
