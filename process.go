@@ -9,6 +9,15 @@ import (
 	"github.com/yaoapp/kun/exception"
 )
 
+var whitelist = map[string]bool{
+	"flows":     true,
+	"session":   true,
+	"ssl":       true,
+	"websocket": true,
+	"http":      true,
+	"widget":    true,
+}
+
 // NewProcess 创建运行器
 func NewProcess(name string, args ...interface{}) *Process {
 	process := &Process{Name: name, Args: args, Global: map[string]interface{}{}}
@@ -83,12 +92,7 @@ func (process *Process) extraProcess() {
 	namer := strings.Split(process.Name, ".")
 	last := len(namer) - 1
 
-	if last < 2 &&
-		namer[0] != "flows" &&
-		namer[0] != "session" &&
-		namer[0] != "ssl" &&
-		namer[0] != "websocket" &&
-		namer[0] != "http" {
+	if _, has := whitelist[namer[0]]; last < 2 && !has {
 		exception.New("Process:%s format error", 400, process.Name).Throw()
 	}
 
@@ -118,23 +122,28 @@ func (process *Process) extraProcess() {
 	}
 
 	switch process.Type {
+
 	case "plugins":
 		process.Name = strings.ToLower(process.Name)
 		process.Handler = processPlugin
 		return
+
 	case "flows":
 		process.Name = strings.ToLower(process.Name)
 		process.Handler = processFlow
 		return
+
 	case "scripts":
 		process.Class = strings.ToLower(strings.Join(namer[1:last], "."))
 		process.Method = namer[last]
 		process.Handler = processScript
 		return
+
 	case "session":
 		process.Method = strings.ToLower(namer[last])
 		process.Handler = processSession
 		return
+
 	case "stores":
 		process.Name = strings.ToLower(process.Name)
 		handler, has := StoreHandlers[process.Method]
@@ -143,6 +152,7 @@ func (process *Process) extraProcess() {
 		}
 		process.Handler = handler
 		return
+
 	case "widgets":
 
 		if widgetHanlders, has := WidgetCustomHandlers[strings.ToLower(process.Class)]; has {
@@ -159,6 +169,7 @@ func (process *Process) extraProcess() {
 		}
 		process.Handler = handler
 		return
+
 	case "schemas":
 		process.Name = strings.ToLower(process.Name)
 		handler, has := SchemaHandlers[process.Method]
@@ -167,6 +178,7 @@ func (process *Process) extraProcess() {
 		}
 		process.Handler = handler
 		return
+
 	case "tasks":
 		process.Name = strings.ToLower(process.Name)
 		handler, has := TaskHandlers[process.Method]
@@ -175,6 +187,7 @@ func (process *Process) extraProcess() {
 		}
 		process.Handler = handler
 		return
+
 	case "schedules":
 		process.Name = strings.ToLower(process.Name)
 		handler, has := ScheduleHandlers[process.Method]
@@ -183,6 +196,7 @@ func (process *Process) extraProcess() {
 		}
 		process.Handler = handler
 		return
+
 	case "models":
 		process.Name = strings.ToLower(process.Name)
 		handler, has := ModelHandlers[process.Method]
@@ -191,6 +205,7 @@ func (process *Process) extraProcess() {
 		}
 		process.Handler = handler
 		return
+
 	default:
 		if handler, has := ThirdHandlers[strings.ToLower(process.Name)]; has {
 			process.Name = strings.ToLower(process.Name)
@@ -262,7 +277,8 @@ func processScript(process *Process) interface{} {
 	return res
 }
 
-// processSession 运行Session函数
+// processSession
+// **WARN** refactor in the next version
 func processSession(process *Process) interface{} {
 
 	if process.Method == "start" {
@@ -270,34 +286,57 @@ func processSession(process *Process) interface{} {
 		return process.Sid
 	}
 
-	if process.Sid == "" {
-		return nil
+	ss := session.Global()
+
+	if process.Sid != "" {
+		ss = ss.ID(process.Sid)
 	}
 
-	ss := session.Global().ID(process.Sid)
 	switch process.Method {
+
 	case "id":
 		return process.Sid
+
 	case "get":
 		process.ValidateArgNums(1)
+		if process.NumOfArgs() == 2 {
+			ss = session.Global().ID(process.ArgsString(1))
+			return ss.MustGet(process.ArgsString(0))
+		}
 		return ss.MustGet(process.ArgsString(0))
+
 	case "set":
 		process.ValidateArgNums(2)
 		if process.NumOfArgs() == 3 {
 			ss.MustSetWithEx(process.ArgsString(0), process.Args[1], time.Duration(process.ArgsInt(2))*time.Second)
 			return nil
+
+		} else if process.NumOfArgs() == 4 {
+			ss = session.Global().ID(process.ArgsString(3))
+			ss.MustSetWithEx(process.ArgsString(0), process.Args[1], time.Duration(process.ArgsInt(2))*time.Second)
 		}
+
 		ss.MustSet(process.ArgsString(0), process.Args[1])
 		return nil
+
 	case "setmany":
 		process.ValidateArgNums(1)
 		if process.NumOfArgs() == 2 {
+			ss.MustSetManyWithEx(process.ArgsMap(0), time.Duration(process.ArgsInt(1))*time.Second)
+			return nil
+
+		} else if process.NumOfArgs() == 3 {
+			ss = session.Global().ID(process.ArgsString(2))
 			ss.MustSetManyWithEx(process.ArgsMap(0), time.Duration(process.ArgsInt(1))*time.Second)
 			return nil
 		}
 		ss.MustSetMany(process.ArgsMap(0))
 		return nil
 	case "dump":
+		if process.NumOfArgs() == 1 {
+			ss = session.Global().ID(process.ArgsString(0))
+			return ss.MustDump()
+		}
 		return ss.MustDump()
 	}
 	return nil
