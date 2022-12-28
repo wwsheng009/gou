@@ -471,7 +471,7 @@ func (mod *Model) hdbDeleteWhere(param QueryParam) (int, error) {
 		} else { // 数字, 布尔型等
 			columns = append(
 				columns,
-				fmt.Sprintf(`'%s'  || ':' || %s`, col.Name, col.Name),
+				fmt.Sprintf(`'%s'  || ':' || "%s"`, col.Name, col.Name),
 			)
 		}
 		if col.Nullable {

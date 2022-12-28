@@ -65,7 +65,7 @@ func (tab Table) ToString() string {
 // Validate 校验表达式格式
 func (tab Table) Validate() error {
 
-	reg := regexp.MustCompile("^[A-Za-z0-9_\u4e00-\u9fa5]+$")
+	reg := regexp.MustCompile("^[A-Za-z0-9_\u4e00-\u9fa5\\.]+$")
 	mreg := regexp.MustCompile("^[a-zA-Z\\.]+$")
 	if !tab.IsModel && !reg.MatchString(tab.Name) {
 		return errors.Errorf("数据表名称格式不正确(%s)", tab.Name)
