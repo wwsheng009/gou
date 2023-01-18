@@ -187,6 +187,7 @@ func (obj *HTTPOBJ) post(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		for name, val := range files {
 			if file, ok := val.(string); ok {
 				if obj.fileRoot != "" {
+					//可以使用系统的temp目录与程序中的data目录
 					if !strings.HasPrefix(file, os.TempDir()) {
 						file = filepath.Join(obj.fileRoot, file)
 					}
