@@ -35,6 +35,12 @@ func (param QueryParam) Query(stack *QueryStack, stackParams ...QueryStackParam)
 		param.Alias = param.Table
 	}
 
+	//alias会作为表字段的前缀，如果表名是复合表名，取最后的部分
+	lastInd := strings.LastIndex(param.Alias, ".")
+	if lastInd > 0 {
+		param.Alias = param.Alias[lastInd+1:]
+	}
+
 	exportPrefix := param.Export
 	if stack == nil {
 		stack = MakeQueryStack()

@@ -121,7 +121,10 @@ func LoadModel(source string, name string) *Model {
 			for _, name := range index.Columns {
 				col, has := columns[name]
 				if has {
-					PrimaryKey = col.Name
+					//防止主键被后面的设置覆盖
+					if PrimaryKey == "" {
+						PrimaryKey = col.Name
+					}
 					uniqueColumns = append(uniqueColumns, col)
 				}
 			}

@@ -2,7 +2,9 @@ package objects
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/cast"
@@ -185,7 +187,9 @@ func (obj *HTTPOBJ) post(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		for name, val := range files {
 			if file, ok := val.(string); ok {
 				if obj.fileRoot != "" {
-					file = filepath.Join(obj.fileRoot, file)
+					if !strings.HasPrefix(file, os.TempDir()) {
+						file = filepath.Join(obj.fileRoot, file)
+					}
 				}
 
 				file, err := filepath.Abs(file)
