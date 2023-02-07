@@ -2,7 +2,9 @@ package gou
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yaoapp/gou/cast"
 	"github.com/yaoapp/gou/http"
@@ -72,7 +74,10 @@ func processHTTPPost(process *Process) interface{} {
 
 		if file, ok := payload.(string); ok {
 			if fileRoot != "" {
-				file = filepath.Join(fileRoot, file)
+				//可以使用系统的temp目录与程序中的data目录
+				if !strings.HasPrefix(file, os.TempDir()) {
+					file = filepath.Join(fileRoot, file)
+				}
 			}
 
 			fileAbs, err := filepath.Abs(file)
@@ -94,7 +99,10 @@ func processHTTPPost(process *Process) interface{} {
 	for name, val := range files {
 		if file, ok := val.(string); ok {
 			if fileRoot != "" {
-				file = filepath.Join(fileRoot, file)
+				//可以使用系统的temp目录与程序中的data目录
+				if !strings.HasPrefix(file, os.TempDir()) {
+					file = filepath.Join(fileRoot, file)
+				}
 			}
 
 			file, err := filepath.Abs(file)
