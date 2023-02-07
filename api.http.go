@@ -126,7 +126,7 @@ func (http HTTP) Route(router gin.IRoutes, path Path, allows ...string) {
 		}
 
 		// Cross domain
-		http.crossDomain(path.Path, allowsMap, router)
+		// http.crossDomain(path.Path, allowsMap, router)
 		handlers = append(handlers, func(c *gin.Context) {
 			referer := c.Request.Referer()
 			if referer != "" {
