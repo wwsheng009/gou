@@ -13,7 +13,7 @@ import (
 
 // Validations 数据校验函数
 var Validations = map[string]func(value interface{}, row maps.MapStrAny, args ...interface{}) bool{
-	"typof":     ValidationTypeof,    // 校验数值类型 string, integer, float, number, datetime, timestamp,
+	"typeof":    ValidationTypeof,    // 校验数值类型 string, integer, float, number, datetime, timestamp,
 	"min":       ValidationMin,       // 最小值
 	"max":       ValidationMax,       // 最大值
 	"enum":      ValidationEnum,      // 枚举型

@@ -135,6 +135,8 @@ func (x *Xun) getDSN(i int) (string, error) {
 		return x.mysqlDSN(i)
 	case "sqlite3":
 		return x.sqlite3DSN(i)
+	case "hdb":
+		return x.hdbDSN(i)
 	}
 
 	return "", fmt.Errorf("the driver %s does not support", x.Driver)
@@ -202,6 +204,50 @@ func (x *Xun) mysqlDSN(i int) (string, error) {
 	if len(params) > 0 {
 		dsn = dsn + "?" + strings.Join(params, "&")
 	}
+
+	return dsn, nil
+}
+
+func (x *Xun) hdbDSN(i int) (string, error) {
+
+	if x.Options.DB == "" {
+		return "", fmt.Errorf("options.db is required")
+	}
+
+	if len(x.Options.Hosts) == 0 {
+		return "", fmt.Errorf("options.hosts is required")
+	}
+
+	host := x.Options.Hosts[i]
+	if host.Host == "" {
+		return "", fmt.Errorf("hosts.%d.host is required", i)
+	}
+
+	if host.Port == "" {
+		host.Port = "3306"
+	}
+
+	if host.User == "" {
+		return "", fmt.Errorf("hosts.%d.user is required", i)
+	}
+
+	if host.Pass == "" {
+		return "", fmt.Errorf("hosts.%d.pass is required", i)
+	}
+
+	// params := []string{}
+	// if x.Options.Charset != "" {
+	// 	params = append(params, fmt.Sprintf("charset=%s", x.Options.Charset))
+	// }
+
+	// if x.Options.ParseTime {
+	// 	params = append(params, fmt.Sprintf("parseTime=True"))
+	// }
+
+	dsn := fmt.Sprintf("%s:%s@%s:%s?defaultSchema=%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+	// if len(params) > 0 {
+	// 	dsn = dsn + "?" + strings.Join(params, "&")
+	// }
 
 	return dsn, nil
 }
