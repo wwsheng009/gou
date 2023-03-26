@@ -203,15 +203,17 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		switch column.Default.(type) {
 		case []byte:
 			value := string(column.Default.([]byte))
-			if strings.ToLower(value) != "null" {
-				column.DefaultRaw = strings.Trim(value, `'`) //有可能是函数
+			if value == "NULL" || value == "'TlVMTA=='" {
 				column.Default = nil
+			} else {
+				column.Default = strings.Trim(value, `'`) //有可能是函数
 			}
 		case string:
 			value := string(column.Default.(string))
-			if strings.ToLower(value) != "null" {
-				column.DefaultRaw = strings.Trim(value, `'`) //有可能是函数
+			if value == "NULL" || value == "'TlVMTA=='" {
 				column.Default = nil
+			} else {
+				column.Default = strings.Trim(value, `'`) //有可能是函数
 			}
 		}
 		break
@@ -221,12 +223,16 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		switch column.Default.(type) {
 		case []byte:
 			value := string(column.Default.([]byte))
-			if strings.ToLower(value) != "null" {
+			if value == "NULL" || value == "'TlVMTA=='" {
+				column.Default = nil
+			} else {
 				column.Default = strings.Trim(value, `'`)
 			}
 		case string:
 			value := string(column.Default.(string))
-			if strings.ToLower(value) != "null" {
+			if value == "NULL" || value == "'TlVMTA=='" {
+				column.Default = nil
+			} else {
 				column.Default = strings.Trim(value, `'`)
 			}
 		}
@@ -237,16 +243,19 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		switch column.Default.(type) {
 		case []byte:
 			value := string(column.Default.([]byte))
-			if strings.ToLower(value) != "null" {
+			if value == "NULL" || value == "'TlVMTA=='" {
+				column.Default = nil
+			} else {
 				column.Default = strings.Trim(value, `'`)
 			}
 		case string:
 			value := string(column.Default.(string))
-			if strings.ToLower(value) != "null" {
+			if value == "NULL" || value == "'TlVMTA=='" {
+				column.Default = nil
+			} else {
 				column.Default = strings.Trim(value, `'`)
 			}
 		}
-		break
 
 	default:
 		column.Type = col.Type
