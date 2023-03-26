@@ -185,7 +185,6 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 			column.Default = any.Of(column.Default.(string)).CFloat()
 		}
 		break
-
 	case "boolean":
 		if v, ok := column.Default.(string); ok {
 			if v == "false" {
@@ -196,23 +195,57 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		}
 		break
 
-	case "timestamp", "datetime":
+	case "timestamp", "dateTime", "dateTimeTz", "time", "timeTz", "timestampTz":
 		if col.OctetLength != nil {
 			// fmt.Println("OctetLength:", column.Name, *col.OctetLength)
 			column.Length = *col.OctetLength
 		}
 		switch column.Default.(type) {
 		case []byte:
-			column.DefaultRaw = string(column.Default.([]byte))
-			column.Default = nil
+			value := string(column.Default.([]byte))
+			if strings.ToLower(value) != "null" {
+				column.DefaultRaw = strings.Trim(value, `'`) //有可能是函数
+				column.Default = nil
+			}
 		case string:
-			column.DefaultRaw = string(column.Default.(string))
-			column.Default = nil
+			value := string(column.Default.(string))
+			if strings.ToLower(value) != "null" {
+				column.DefaultRaw = strings.Trim(value, `'`) //有可能是函数
+				column.Default = nil
+			}
 		}
 		break
-	case "json":
+
+	case "text", "mediumText", "longText", "binary", "string", "char",
+		"ipAddress", "year", "uuid", "macAddress":
+		switch column.Default.(type) {
+		case []byte:
+			value := string(column.Default.([]byte))
+			if strings.ToLower(value) != "null" {
+				column.Default = strings.Trim(value, `'`)
+			}
+		case string:
+			value := string(column.Default.(string))
+			if strings.ToLower(value) != "null" {
+				column.Default = strings.Trim(value, `'`)
+			}
+		}
+
+	case "json", "jsonb":
 		column.Comment = strings.TrimLeft(column.Comment, "T:json|")
 		column.Label = strings.TrimLeft(column.Label, "T:json|")
+		switch column.Default.(type) {
+		case []byte:
+			value := string(column.Default.([]byte))
+			if strings.ToLower(value) != "null" {
+				column.Default = strings.Trim(value, `'`)
+			}
+		case string:
+			value := string(column.Default.(string))
+			if strings.ToLower(value) != "null" {
+				column.Default = strings.Trim(value, `'`)
+			}
+		}
 		break
 
 	default:
