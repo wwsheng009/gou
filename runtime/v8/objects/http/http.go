@@ -140,7 +140,10 @@ func (obj *Object) post(iso *v8go.Isolate) *v8go.FunctionTemplate {
 			if file, ok := payload.(string); ok {
 
 				if obj.fileRoot != "" {
-					file = filepath.Join(obj.fileRoot, file)
+					//可以使用系统的temp目录与程序中的data目录
+					if !strings.HasPrefix(file, os.TempDir()) {
+						file = filepath.Join(obj.fileRoot, file)
+					}
 				}
 
 				fileAbs, err := filepath.Abs(file)
