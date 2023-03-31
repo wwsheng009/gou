@@ -79,6 +79,11 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
+require (
+	github.com/SAP/go-hdb v0.105.8 // indirect
+	golang.org/x/exp v0.0.0-20221208152030-732eee02a75a // indirect
+)
+
 replace github.com/yaoapp/kun => ../kun
 
 replace github.com/yaoapp/xun => ../xun
