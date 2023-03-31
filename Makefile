@@ -5,7 +5,7 @@ VETPACKAGES ?= $(shell $(GO) list ./... | grep -v /examples/)
 GOFILES := $(shell find . -name "*.go")
 
 # ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-TESTFOLDER := $(shell $(GO) list ./... | grep -v examples)
+TESTFOLDER := $(shell $(GO) list ./... | grep -E 'api|server/http|runtime|process|widget|model|schema|lang|query|task|schedule|flow|session|store|fs|http|encoding|ssl|plugin|connector|wasm|websocket$|v8' | grep -v -E 'wamr|socket')
 TESTTAGS ?= ""
 
 .PHONY: test
@@ -31,6 +31,12 @@ test:
 			cat profile.out | grep -v "mode:" >> coverage.out; \
 			rm profile.out; \
 		fi; \
+	done
+
+.PHONY: bench
+bench:
+	for d in $(TESTFOLDER); do \
+		$(GO) test -run Benchmark -v -bench=. -benchtime=5s -benchmem $$d; \
 	done
 
 .PHONY: fmt
@@ -74,22 +80,6 @@ misspell:
 tools:
 	go install golang.org/x/lint/golint@latest; \
 	go install github.com/client9/misspell/cmd/misspell@latest;
-
-.PHONY: plugin
-plugin: 
-	rm -rf $(HOME)/data/gou-unit/plugins
-	rm -rf $(HOME)/data/gou-unit/logs
-	mkdir -p $(HOME)/data/gou-unit/plugins
-	mkdir -p $(HOME)/data/gou-unit/logs
-	GOOS=linux GOARCH=amd64 go build -o $(HOME)/data/gou-unit/plugins/user ./app/plugins/user
-	chmod +x $(HOME)/data/gou-unit/plugins/user
-	ls -l $(HOME)/data/gou-unit/plugins
-	ls -l $(HOME)/data/gou-unit/logs
-	$(HOME)/data/gou-unit/plugins/user 2>&1 || true
-plugin-mac: 
-	rm -rf ./app/plugins/user/dist
-	go build -o ./app/plugins/dist/user ./app/plugins/user
-	chmod +x ./app/plugins/dist/user
 
 .PHONY: migrate
 migrate:

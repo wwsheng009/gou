@@ -16,6 +16,7 @@ env:
   GOU_TEST_GITHUB_REPO: github.com/YaoApp/workshop-tests-private
   GOU_TEST_DSL_TABLE_NAME: test_env
   GOU_TEST_APPLICATION: ${{ github.WORKSPACE }}/gou-dev-app
+  GOU_TEST_PLUGIN: ${{ github.WORKSPACE }}/gou-dev-app/plugins/linux
   SEND_MAIL_WORKER_NUMS: 2
   SEND_MAIL_TEST_MAIL: max@iqka.com
   REPO_KUN: ${{ github.repository_owner }}/kun
@@ -43,38 +44,38 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [1.19.2]
+        go: [1.19.5, 1.20.0]
         db: [MySQL8.0, SQLite3]
         redis: [4, 5, 6]
         mongo: ["6.0"]
     steps:
       - name: Checkout Kun
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.REPO_KUN }}
           path: kun
 
       - name: Checkout Xun
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.REPO_XUN }}
           path: xun
 
       - name: Checkout Application
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ env.REPO_APP }}
           path: gou-dev-app
 
       - name: Checkout V8Go
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
-          repository: rogchap/v8go
-          ref: 5e91d3d9dcabd2986f901b6b31590e49fc3c4dd8
+          repository: yaoapp/v8go
+          ref: aac4923ed74083e58ae7b42b1acb0fa0d11a26cb
           path: v8go
 
       - name: Checkout Demo WMS
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: yaoapp/demo-wms
           path: demo-wms
@@ -90,7 +91,7 @@ jobs:
           ls -l ../
 
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Move Application
         run: |
@@ -160,11 +161,13 @@ jobs:
           make vet
           make fmt-check
           make misspell-check
-          make plugin
-          make migrate
           make test
 
+      - name: Run Benchmark
+        run: |
+          make bench
+
       - name: Codecov Report
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos

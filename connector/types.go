@@ -1,5 +1,7 @@
 package connector
 
+import "github.com/yaoapp/xun/dbal/query"
+
 const (
 	// DATABASE the database connector (mysql, pgsql, oracle, sqlite ... )
 	DATABASE = iota + 1
@@ -36,7 +38,9 @@ var types = map[string]int{
 
 // Connector the connector interface
 type Connector interface {
-	Register(id string, dsl []byte) error
+	Register(file string, id string, dsl []byte) error
+	Query() (query.Query, error)
+	Close() error
 	ID() string
 	Is(int) bool
 }

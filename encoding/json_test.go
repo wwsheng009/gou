@@ -3,14 +3,14 @@ package encoding
 import (
 	"testing"
 
-	"github.com/go-playground/assert/v2"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/yaoapp/gou"
+	"github.com/stretchr/testify/assert"
+	"github.com/yaoapp/gou/process"
 )
 
 func TestJSONEncode(t *testing.T) {
 	data := []string{"foo", "bar"}
-	res, err := gou.NewProcess("encoding.json.Encode", data).Exec()
+	res, err := process.New("encoding.json.Encode", data).Exec()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestJSONEncode(t *testing.T) {
 
 func TestJSONDecode(t *testing.T) {
 	data := `["foo", "bar"]`
-	res, err := gou.NewProcess("encoding.json.Decode", data).Exec()
+	res, err := process.New("encoding.json.Decode", data).Exec()
 	if err != nil {
 		t.Fatal(err)
 	}

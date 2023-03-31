@@ -6,16 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	jsoniter "github.com/json-iterator/go"
+	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/helper"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/xun/capsule"
 	"github.com/yaoapp/xun/dbal"
+	"github.com/yaoapp/xun/dbal/query"
 )
 
 // Xun the xun database ORM
 type Xun struct {
 	id      string
+	file    string
 	Manager *capsule.Manager `json:"-"`
 	Name    string           `json:"name,omitempty"`
 	Driver  string           `json:"type"`
@@ -47,8 +49,9 @@ type XunHost struct {
 }
 
 // Register the connections from dsl
-func (x *Xun) Register(id string, dsl []byte) error {
-	err := jsoniter.Unmarshal(dsl, x)
+func (x *Xun) Register(file string, id string, dsl []byte) error {
+
+	err := application.Parse(file, dsl, x)
 	if err != nil {
 		return err
 	}
@@ -57,7 +60,9 @@ func (x *Xun) Register(id string, dsl []byte) error {
 	if err != nil {
 		return err
 	}
+
 	x.id = id
+	x.file = file
 	return x.makeConnections()
 }
 
@@ -69,6 +74,44 @@ func (x *Xun) Is(typ int) bool {
 // ID get connector id
 func (x *Xun) ID() string {
 	return x.id
+}
+
+// Query get connector query interface
+func (x *Xun) Query() (query.Query, error) {
+
+	if x.Manager.Connections == nil {
+		return nil, fmt.Errorf("connection is empty")
+	}
+
+	conn := &query.Connection{Option: x.Manager.Option}
+	for i, host := range x.Options.Hosts {
+		name := fmt.Sprintf("%s_%d", x.Name, i)
+		c, has := x.Manager.Connections.Load(name)
+		if !has {
+			return nil, fmt.Errorf("connection %s not load", name)
+		}
+
+		db, ok := c.(*capsule.Connection)
+		if !ok {
+			return nil, fmt.Errorf("connection %s type error %#v", name, c)
+		}
+
+		if host.Primary {
+			conn.Write = &db.DB
+			conn.WriteConfig = db.Config
+			continue
+		}
+
+		conn.Read = &db.DB
+		conn.ReadConfig = db.Config
+	}
+
+	return query.Use(conn), nil
+}
+
+// Close connections
+func (x *Xun) Close() error {
+	return x.Manager.Close()
 }
 
 func (x *Xun) makeConnections() (err error) {

@@ -6,14 +6,16 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	jsoniter "github.com/json-iterator/go"
+	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/helper"
 	"github.com/yaoapp/kun/any"
+	"github.com/yaoapp/xun/dbal/query"
 )
 
 // Connector connector
 type Connector struct {
-	id      string        `json:"-"`
+	id      string
+	file    string
 	Name    string        `json:"name"`
 	Rdb     *redis.Client `json:"-"`
 	Options Options       `json:"options"`
@@ -30,8 +32,9 @@ type Options struct {
 }
 
 // Register the connections from dsl
-func (r *Connector) Register(id string, dsl []byte) error {
-	err := jsoniter.Unmarshal(dsl, r)
+func (r *Connector) Register(file string, id string, dsl []byte) error {
+
+	err := application.Parse(file, dsl, r)
 	if err != nil {
 		return err
 	}
@@ -42,6 +45,7 @@ func (r *Connector) Register(id string, dsl []byte) error {
 	}
 
 	r.id = id
+	r.file = file
 	return r.makeConnection()
 }
 
@@ -53,6 +57,16 @@ func (r *Connector) Is(typ int) bool {
 // ID get connector id
 func (r *Connector) ID() string {
 	return r.id
+}
+
+// Query get connector query interface
+func (r *Connector) Query() (query.Query, error) {
+	return nil, nil
+}
+
+// Close connections
+func (r *Connector) Close() error {
+	return r.Rdb.Close()
 }
 
 func (r *Connector) setDefaults() error {

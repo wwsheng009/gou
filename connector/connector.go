@@ -3,7 +3,7 @@ package connector
 import (
 	"fmt"
 
-	jsoniter "github.com/json-iterator/go"
+	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/connector/database"
 	mongo "github.com/yaoapp/gou/connector/mongo"
 	"github.com/yaoapp/gou/connector/redis"
@@ -13,11 +13,15 @@ import (
 var Connectors = map[string]Connector{}
 
 // Load a connector from source
-func Load(source string, id string) (Connector, error) {
+func Load(file string, id string) (Connector, error) {
 
 	dsl := DSL{}
-	bytes := []byte(source)
-	err := jsoniter.Unmarshal(bytes, &dsl)
+	data, err := application.App.Read(file)
+	if err != nil {
+		return nil, err
+	}
+
+	err = application.Parse(file, data, &dsl)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +31,7 @@ func Load(source string, id string) (Connector, error) {
 		return nil, err
 	}
 
-	err = c.Register(id, bytes)
+	err = c.Register(file, id, data)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +42,20 @@ func Load(source string, id string) (Connector, error) {
 
 // Select a connector
 func Select(id string) (Connector, error) {
-	return nil, nil
+	connector, has := Connectors[id]
+	if !has {
+		return nil, fmt.Errorf("connector %s not loaded", id)
+	}
+	return connector, nil
+}
+
+// Remove a connector
+func Remove(id string) error {
+	connector, has := Connectors[id]
+	if !has {
+		return fmt.Errorf("connector %s not loaded", id)
+	}
+	return connector.Close()
 }
 
 func make(typ string) (Connector, error) {
