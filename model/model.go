@@ -16,6 +16,7 @@ var Models = map[string]*Model{}
 
 // Load 载入数据模型
 func Load(file string, id string) (*Model, error) {
+
 	data, err := application.App.Read(file)
 	if err != nil {
 		return nil, err
