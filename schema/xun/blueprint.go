@@ -195,7 +195,7 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		}
 		break
 
-	case "timestamp", "dateTime", "dateTimeTz", "time", "timeTz", "timestampTz":
+	case "timestamp", "dateTime", "dateTimeTz", "time", "timeTz", "timestampTz", "date":
 		if col.OctetLength != nil {
 			// fmt.Println("OctetLength:", column.Name, *col.OctetLength)
 			column.Length = *col.OctetLength
