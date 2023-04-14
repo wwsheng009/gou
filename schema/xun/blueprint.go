@@ -147,6 +147,24 @@ func ColumnToBlueprint(col *schema.Column, prikeys []string) types.Column {
 }
 
 func parseColumnType(col *schema.Column, column *types.Column) {
+
+	switch column.Default.(type) {
+	case []byte:
+		value := string(column.Default.([]byte))
+		if value == "NULL" || value == "'TlVMTA=='" {
+			column.Default = nil
+		} else {
+			column.Default = strings.Trim(value, `'`)
+		}
+	case string:
+		value := string(column.Default.(string))
+		if value == "NULL" || value == "'TlVMTA=='" {
+			column.Default = nil
+		} else {
+			column.Default = strings.Trim(value, `'`)
+		}
+	}
+
 	column.Type = col.Type
 
 	switch col.Type {
@@ -200,63 +218,10 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 			// fmt.Println("OctetLength:", column.Name, *col.OctetLength)
 			column.Length = *col.OctetLength
 		}
-		switch column.Default.(type) {
-		case []byte:
-			value := string(column.Default.([]byte))
-			if value == "NULL" || value == "'TlVMTA=='" {
-				column.Default = nil
-			} else {
-				column.Default = strings.Trim(value, `'`) //有可能是函数
-			}
-		case string:
-			value := string(column.Default.(string))
-			if value == "NULL" || value == "'TlVMTA=='" {
-				column.Default = nil
-			} else {
-				column.Default = strings.Trim(value, `'`) //有可能是函数
-			}
-		}
 		break
-
-	case "text", "mediumText", "longText", "binary", "string", "char",
-		"ipAddress", "year", "uuid", "macAddress":
-		switch column.Default.(type) {
-		case []byte:
-			value := string(column.Default.([]byte))
-			if value == "NULL" || value == "'TlVMTA=='" {
-				column.Default = nil
-			} else {
-				column.Default = strings.Trim(value, `'`)
-			}
-		case string:
-			value := string(column.Default.(string))
-			if value == "NULL" || value == "'TlVMTA=='" {
-				column.Default = nil
-			} else {
-				column.Default = strings.Trim(value, `'`)
-			}
-		}
-
 	case "json", "jsonb":
 		column.Comment = strings.TrimLeft(column.Comment, "T:json|")
 		column.Label = strings.TrimLeft(column.Label, "T:json|")
-		switch column.Default.(type) {
-		case []byte:
-			value := string(column.Default.([]byte))
-			if value == "NULL" || value == "'TlVMTA=='" {
-				column.Default = nil
-			} else {
-				column.Default = strings.Trim(value, `'`)
-			}
-		case string:
-			value := string(column.Default.(string))
-			if value == "NULL" || value == "'TlVMTA=='" {
-				column.Default = nil
-			} else {
-				column.Default = strings.Trim(value, `'`)
-			}
-		}
-
 	default:
 		column.Type = col.Type
 	}
