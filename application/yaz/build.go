@@ -230,7 +230,7 @@ func compress(root string, target string, cipher Cipher) error {
 		if err != nil {
 			return err
 		}
-
+		relPath = strings.ReplaceAll(relPath, "\\", "/")
 		if gitignore.MatchesPath(relPath) {
 			return nil
 		}
@@ -263,8 +263,8 @@ func compress(root string, target string, cipher Cipher) error {
 				if err != nil {
 					return err
 				}
-				defer encryptWriter.Close()
 				defer os.Remove(encryptFile)
+				defer encryptWriter.Close()
 
 				err = cipher.Encrypt(file, encryptWriter)
 				if err != nil {
