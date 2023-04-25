@@ -2,10 +2,14 @@ package application
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/application/disk"
+	"github.com/yaoapp/gou/application/yaz"
+	"github.com/yaoapp/kun/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,7 +18,38 @@ var App Application = nil
 
 // Load the application
 func Load(app Application) {
+
 	App = app
+
+	// load the pack.yao
+	if has, _ := app.Exists("pack.yao"); !has {
+		return
+	}
+
+	v, err := app.Read("pack.yao")
+	if err != nil {
+		log.Warn("Application Load: %s", err.Error())
+		return
+	}
+
+	pack := Pack{}
+	err = Parse("pack.yao", v, &pack)
+	if err != nil {
+		log.Warn("Application Load Parse Pack: %s", err.Error())
+		return
+	}
+
+	if pack.Environments == nil {
+		return
+	}
+
+	for name, value := range pack.Environments {
+		if os.Getenv(name) == "" {
+			if err := os.Setenv(name, value); err != nil {
+				log.Warn("Application Load Set ENV: %s", err.Error())
+			}
+		}
+	}
 }
 
 // OpenFromDisk open the application from disk
@@ -22,14 +57,19 @@ func OpenFromDisk(root string) (Application, error) {
 	return disk.Open(root)
 }
 
-// OpenFromPkg open the application from the .pkg file
-func OpenFromPkg(file string, pack Pack) (Application, error) {
-	return nil, nil
+// OpenFromYazFile open the application from the .yaz file
+func OpenFromYazFile(file string, cipher yaz.Cipher) (Application, error) {
+	return yaz.OpenFile(file, cipher)
 }
 
-// OpenFromBin open the application from the binary .app file
-func OpenFromBin(file string, pack Pack) (Application, error) {
-	return nil, nil
+// OpenFromYazCache open the application from the cache
+func OpenFromYazCache(file string, cipher yaz.Cipher) (Application, error) {
+	return yaz.OpenCache(file, cipher)
+}
+
+// OpenFromYaz open the application from the binary .app file
+func OpenFromYaz(reader io.Reader, file string, cipher yaz.Cipher) (Application, error) {
+	return yaz.Open(reader, file, cipher)
 }
 
 // OpenFromDB open the application from database
