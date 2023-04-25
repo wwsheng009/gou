@@ -1,6 +1,8 @@
 package studio
 
 import (
+	"fmt"
+
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/gou/runtime/v8/bridge"
 	"rogchap.com/v8go"
@@ -40,8 +42,9 @@ func exec(info *v8go.FunctionCallbackInfo) *v8go.Value {
 			return bridge.JsException(info.Context(), err)
 		}
 	}
-
-	goRes, err := process.New(jsArgs[0].String(), goArgs...).
+	studioScript := fmt.Sprintf("studio.%s", jsArgs[0].String())
+	goRes, err := process.New(studioScript, goArgs...).
+		// goRes, err := process.New(jsArgs[0].String(), goArgs...).
 		WithGlobal(global).
 		WithSID(sid).
 		Exec()
