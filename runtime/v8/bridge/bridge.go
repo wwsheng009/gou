@@ -3,6 +3,7 @@ package bridge
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/kun/exception"
@@ -143,9 +144,14 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 
 	switch v := value.(type) {
 
-	case string, int32, uint32, int64, uint64, bool, *big.Int, float64, []byte:
+	case string, int32, uint32, bool, float64, []byte:
 		return v8go.NewValue(ctx.Isolate(), v)
-
+	case *big.Int:
+		return v8go.NewValue(ctx.Isolate(), (*v).String)
+	case int64:
+		return v8go.NewValue(ctx.Isolate(), strconv.FormatInt(v, 10))
+	case uint64:
+		return v8go.NewValue(ctx.Isolate(), strconv.FormatUint(v, 10))
 	case int:
 		return v8go.NewValue(ctx.Isolate(), int32(v))
 
