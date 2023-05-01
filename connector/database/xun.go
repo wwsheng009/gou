@@ -28,14 +28,15 @@ type Xun struct {
 
 // XunOptions the connetion options
 type XunOptions struct {
-	DB          string    `json:"db"`
-	TablePrefix string    `json:"prefix"`
-	Collation   string    `json:"collation,omitempty"`
-	Charset     string    `json:"charset,omitempty"`
-	ParseTime   bool      `json:"parseTime,omitempty"`
-	Timeout     int       `json:"timeout,omitempty"`
-	File        string    `json:"file,omitempty"`
-	Hosts       []XunHost `json:"hosts"`
+	DB          string                 `json:"db"`
+	TablePrefix string                 `json:"prefix"`
+	Collation   string                 `json:"collation,omitempty"`
+	Charset     string                 `json:"charset,omitempty"` //mysql charset
+	ParseTime   bool                   `json:"parseTime,omitempty"`
+	Timeout     int                    `json:"timeout,omitempty"`
+	File        string                 `json:"file,omitempty"`
+	Params      map[string]interface{} `json:"params"`
+	Hosts       []XunHost              `json:"hosts"`
 }
 
 // XunHost the connection host
@@ -190,6 +191,8 @@ func (x *Xun) getDSN(i int) (string, error) {
 		return x.mysqlDSN(i)
 	case "sqlite3":
 		return x.sqlite3DSN(i)
+	case "postgres":
+		return x.postGresqDSN(i)
 	case "hdb":
 		return x.hdbDSN(i)
 	}
@@ -252,7 +255,12 @@ func (x *Xun) mysqlDSN(i int) (string, error) {
 	}
 
 	if x.Options.ParseTime {
-		params = append(params, fmt.Sprintf("parseTime=True"))
+		params = append(params, "parseTime=True")
+	}
+	if x.Options.Params != nil {
+		for name, value := range x.Options.Params {
+			params = append(params, fmt.Sprintf("%s=%v", name, value))
+		}
 	}
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
@@ -263,6 +271,48 @@ func (x *Xun) mysqlDSN(i int) (string, error) {
 	return dsn, nil
 }
 
+// postgres
+func (x *Xun) postGresqDSN(i int) (string, error) {
+
+	if x.Options.DB == "" {
+		return "", fmt.Errorf("options.db is required")
+	}
+
+	if len(x.Options.Hosts) == 0 {
+		return "", fmt.Errorf("options.hosts is required")
+	}
+
+	host := x.Options.Hosts[i]
+	if host.Host == "" {
+		return "", fmt.Errorf("hosts.%d.host is required", i)
+	}
+
+	if host.Port == "" {
+		host.Port = "5096"
+	}
+
+	if host.User == "" {
+		return "", fmt.Errorf("hosts.%d.user is required", i)
+	}
+
+	if host.Pass == "" {
+		return "", fmt.Errorf("hosts.%d.pass is required", i)
+	}
+	params := []string{}
+	if x.Options.Params != nil {
+		for name, value := range x.Options.Params {
+			params = append(params, fmt.Sprintf("%s=%v", name, value))
+		}
+	}
+
+	dsn := fmt.Sprintf("%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+	if len(params) > 0 {
+		dsn = dsn + "?" + strings.Join(params, "&")
+	}
+	return dsn, nil
+}
+
+// sap hana db
 func (x *Xun) hdbDSN(i int) (string, error) {
 
 	if x.Options.DB == "" {
@@ -279,7 +329,7 @@ func (x *Xun) hdbDSN(i int) (string, error) {
 	}
 
 	if host.Port == "" {
-		host.Port = "3306"
+		host.Port = "30015"
 	}
 
 	if host.User == "" {
@@ -289,21 +339,16 @@ func (x *Xun) hdbDSN(i int) (string, error) {
 	if host.Pass == "" {
 		return "", fmt.Errorf("hosts.%d.pass is required", i)
 	}
-
-	// params := []string{}
-	// if x.Options.Charset != "" {
-	// 	params = append(params, fmt.Sprintf("charset=%s", x.Options.Charset))
-	// }
-
-	// if x.Options.ParseTime {
-	// 	params = append(params, fmt.Sprintf("parseTime=True"))
-	// }
-
-	dsn := fmt.Sprintf("%s:%s@%s:%s?defaultSchema=%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
-	// if len(params) > 0 {
-	// 	dsn = dsn + "?" + strings.Join(params, "&")
-	// }
-
+	params := []string{}
+	if x.Options.Params != nil {
+		for name, value := range x.Options.Params {
+			params = append(params, fmt.Sprintf("%s=%v", name, value))
+		}
+	}
+	dsn := fmt.Sprintf("%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+	if len(params) > 0 {
+		dsn = dsn + "?" + strings.Join(params, "&")
+	}
 	return dsn, nil
 }
 
@@ -318,5 +363,6 @@ func (x *Xun) Setting() map[string]interface{} {
 		"timeout":   x.Options.Timeout,
 		"file":      x.Options.File,
 		"hosts":     x.Options.Hosts,
+		"params":    x.Options.Params,
 	}
 }
