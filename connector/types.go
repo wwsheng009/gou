@@ -36,6 +36,7 @@ var types = map[string]int{
 	"sqlite":        DATABASE,
 	"sqlite3":       DATABASE,
 	"postgres":      DATABASE,
+	"hdb":           DATABASE,
 	"oracle":        DATABASE,
 	"redis":         REDIS,
 	"mongo":         MONGO,
