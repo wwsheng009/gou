@@ -134,6 +134,10 @@ func (mod *Model) Reload() (*Model, error) {
 
 // Migrate 数据迁移
 func (mod *Model) Migrate(force bool) error {
+	if mod.MetaData.Option.Readonly {
+		log.Info("read only model,ignore migrate: %s", mod.Name)
+		return nil
+	}
 	if force {
 		err := mod.DropTable()
 		if err != nil {
