@@ -173,7 +173,7 @@ func (gou Query) Run(data maps.Map) interface{} {
 		utils.Dump(bindings)
 	}
 
-	res, err := qb.DB().Exec(sql, bindings...)
+	res, err := qb.UseWrite().DB().Exec(sql, bindings...)
 	if err != nil {
 		exception.New("数据查询错误 %s", 500, err.Error()).Throw()
 	}
