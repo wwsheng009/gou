@@ -21,7 +21,7 @@ require (
 	github.com/tidwall/buntdb v1.2.9
 	github.com/yaoapp/kun v0.9.0
 	github.com/yaoapp/xun v0.0.0-00010101000000-000000000000
-	golang.org/x/crypto v0.7.0
+	golang.org/x/crypto v0.8.0
 	gopkg.in/yaml.v3 v3.0.1
 	rogchap.com/v8go v0.8.0
 )
@@ -36,7 +36,7 @@ require (
 	github.com/go-playground/universal-translator v0.17.0 // indirect
 	github.com/go-playground/validator/v10 v10.4.1 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87 // indirect
 	github.com/jmoiron/sqlx v1.3.1 // indirect
@@ -68,20 +68,20 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.mongodb.org/mongo-driver v1.11.3
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/genproto v0.0.0-20220526192754-51939a95c655 // indirect
 	google.golang.org/grpc v1.46.2 // indirect
-	google.golang.org/protobuf v1.28.1 // indirect
+	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (
-	github.com/SAP/go-hdb v0.105.8 // indirect
-	golang.org/x/exp v0.0.0-20221208152030-732eee02a75a // indirect
+	github.com/SAP/go-hdb v1.2.1 // indirect
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 )
 
 replace github.com/yaoapp/kun => ../kun
@@ -89,5 +89,3 @@ replace github.com/yaoapp/kun => ../kun
 replace github.com/yaoapp/xun => ../xun
 
 replace rogchap.com/v8go => ../v8go
-
-replace github.com/SAP/go-hdb => ../go-hdb // gou local
