@@ -184,13 +184,17 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 			column.Type = "ID"
 			column.Nullable = false
 		}
-
-		switch column.Default.(type) {
-		case []byte:
-			column.Default = any.Of(string(column.Default.([]byte))).CInt()
-		case string:
-			column.Default = any.Of(column.Default.(string)).CInt()
+		if column.Type == "ID" {
+			column.Default = nil //postgres id is nexid express
+		} else {
+			switch column.Default.(type) {
+			case []byte:
+				column.Default = any.Of(string(column.Default.([]byte))).CInt()
+			case string:
+				column.Default = any.Of(column.Default.(string)).CInt()
+			}
 		}
+
 		break
 
 	case "float", "decimal", "double":

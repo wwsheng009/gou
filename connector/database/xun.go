@@ -305,7 +305,7 @@ func (x *Xun) postGresqDSN(i int) (string, error) {
 		}
 	}
 
-	dsn := fmt.Sprintf("%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+	dsn := fmt.Sprintf("postgres//%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
 	if len(params) > 0 {
 		dsn = dsn + "?" + strings.Join(params, "&")
 	}
@@ -345,7 +345,7 @@ func (x *Xun) hdbDSN(i int) (string, error) {
 			params = append(params, fmt.Sprintf("%s=%v", name, value))
 		}
 	}
-	dsn := fmt.Sprintf("%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+	dsn := fmt.Sprintf("hdb://%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
 	if len(params) > 0 {
 		dsn = dsn + "?" + strings.Join(params, "&")
 	}
