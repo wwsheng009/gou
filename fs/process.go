@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/gou/types"
 	"github.com/yaoapp/kun/exception"
@@ -320,7 +321,16 @@ func processUpload(process *process.Process) interface{} {
 	process.ValidateArgNums(1)
 	tmpfile, ok := process.Args[0].(types.UploadFile)
 	if !ok {
-		exception.New("parameters error: %v", 400, process.Args[0]).Throw()
+		bytes, err := jsoniter.Marshal(process.Args[0])
+		if err != nil {
+			exception.New("parameters error: %v", 400, process.Args[0]).Throw()
+		}
+
+		err = jsoniter.Unmarshal(bytes, &tmpfile)
+		if err != nil {
+			exception.New("parameters error: %v", 400, process.Args[0]).Throw()
+		}
+		// exception.New("parameters error: %v", 400, process.Args[0]).Throw()
 	}
 
 	hash := md5.Sum([]byte(time.Now().Format("20060102-15:04:05")))
