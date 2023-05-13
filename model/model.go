@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/kun/exception"
@@ -13,6 +14,14 @@ import (
 
 // Models 已载入模型
 var Models = map[string]*Model{}
+var lock sync.Mutex
+
+// LoadSync load model sync
+func LoadSync(file string, id string) (*Model, error) {
+	lock.Lock()
+	defer lock.Unlock()
+	return Load(file, id)
+}
 
 // Load 载入数据模型
 func Load(file string, id string) (*Model, error) {
@@ -63,10 +72,10 @@ func Load(file string, id string) (*Model, error) {
 				Nullable: true,
 			},
 			Column{
-				Label:    "Updated At",
+				Label:    "::Updated At",
 				Name:     "updated_at",
 				Type:     "timestamp",
-				Comment:  "Updated At",
+				Comment:  "::Updated At",
 				Nullable: true,
 			},
 		)
