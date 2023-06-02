@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Dir is the public path
@@ -40,7 +41,8 @@ func (dir Dir) Open(name string) (http.File, error) {
 
 	// decrypt file
 	buff := &bytes.Buffer{}
-	if dir.cipher != nil {
+	ext := strings.TrimPrefix(filepath.Ext(name), ".")
+	if dir.cipher != nil && encryptFiles[ext] {
 		dir.cipher.Decrypt(f, buff)
 	}
 
@@ -50,7 +52,8 @@ func (dir Dir) Open(name string) (http.File, error) {
 // Read reads up to len(p) bytes into p.
 func (file *File) Read(p []byte) (n int, err error) {
 
-	if file.cipher != nil {
+	ext := strings.TrimPrefix(filepath.Ext(file.Name()), ".")
+	if file.cipher != nil && encryptFiles[ext] {
 		if len(file.buff) == 0 {
 			return 0, nil
 		}
@@ -59,7 +62,7 @@ func (file *File) Read(p []byte) (n int, err error) {
 		return n, nil
 	}
 
-	return file.Read(p)
+	return file.File.Read(p)
 }
 
 // Close closes the File, rendering it unusable for I/O.
