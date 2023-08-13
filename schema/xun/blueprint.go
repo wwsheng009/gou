@@ -225,6 +225,7 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 	case "json", "jsonb":
 		column.Comment = strings.TrimLeft(column.Comment, "T:json|")
 		column.Label = strings.TrimLeft(column.Label, "T:json|")
+		column.Length = 0
 	default:
 		column.Type = col.Type
 	}
