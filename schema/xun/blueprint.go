@@ -176,8 +176,6 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		case string:
 			column.Default = strings.ReplaceAll(column.Default.(string), "'", "")
 		}
-		break
-
 	case "integer", "tinyInteger", "smallInteger", "bigInteger":
 		column.Length = 0
 		if column.Primary && col.Extra != nil {
@@ -195,8 +193,6 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 			}
 		}
 
-		break
-
 	case "float", "decimal", "double":
 		column.Length = 0
 		switch column.Default.(type) {
@@ -205,7 +201,6 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 		case string:
 			column.Default = any.Of(column.Default.(string)).CFloat()
 		}
-		break
 	case "boolean":
 		if v, ok := column.Default.(string); ok {
 			if v == "false" {
@@ -214,14 +209,15 @@ func parseColumnType(col *schema.Column, column *types.Column) {
 				column.Default = true
 			}
 		}
-		break
 
 	case "timestamp", "dateTime", "dateTimeTz", "time", "timeTz", "timestampTz", "date":
 		if col.OctetLength != nil {
 			// fmt.Println("OctetLength:", column.Name, *col.OctetLength)
 			column.Length = *col.OctetLength
 		}
-		break
+
+	case "text":
+		column.Length = 0
 	case "json", "jsonb":
 		column.Comment = strings.TrimLeft(column.Comment, "T:json|")
 		column.Label = strings.TrimLeft(column.Label, "T:json|")
