@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -286,6 +287,61 @@ func (http HTTP) parseIn(in []interface{}) func(c *gin.Context) []interface{} {
 			getValues = append(getValues, func(c *gin.Context) interface{} {
 				values := c.Request.URL.Query()
 				return types.URLToQueryParam(values)
+			})
+			continue
+		} else if v == ":multi-parts" {
+			//读取multipart
+			getValues = append(getValues, func(c *gin.Context) interface{} {
+				reader, err := c.Request.MultipartReader()
+				if err != nil {
+					exception.New("读取multipart/mixed出错 %s", 500, err).Throw()
+				}
+				parts := make([]string, 0)
+				for {
+					part, err := reader.NextPart()
+					if err != nil {
+						if err == io.EOF {
+							break
+						} else {
+							exception.New("读取multipart/mixed出错 %s", 500, err).Throw()
+						}
+					}
+					bytes, err := io.ReadAll(part)
+					if err != nil {
+						// Handle error
+						exception.New("读取multipart/mixed出错 %s", 500, err).Throw()
+					}
+					str := string(bytes)
+					parts = append(parts, str)
+				}
+				return parts
+			})
+			continue
+		} else if v == ":path" {
+			//请求的路径
+			getValues = append(getValues, func(c *gin.Context) interface{} {
+				return c.Request.URL.Path
+			})
+			continue
+		} else if v == ":host" {
+			//请求的域名:端口
+			getValues = append(getValues, func(c *gin.Context) interface{} {
+				return c.Request.Host
+			})
+			continue
+		} else if v == ":schema" {
+			//请求的schema
+			getValues = append(getValues, func(c *gin.Context) interface{} {
+				scheme := "http"
+				if c.Request.TLS != nil {
+					scheme = "https"
+				}
+				return scheme
+			})
+			continue
+		} else if v == ":remote-host" {
+			getValues = append(getValues, func(c *gin.Context) interface{} {
+				return c.Request.RemoteAddr
 			})
 			continue
 		} else if v == ":ip" {
