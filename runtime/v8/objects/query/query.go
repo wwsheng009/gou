@@ -197,7 +197,7 @@ func (obj *Object) runQueryRun(iso *v8go.Isolate, info *v8go.FunctionCallbackInf
 func (obj *Object) response(iso *v8go.Isolate, info *v8go.FunctionCallbackInfo, data interface{}) *v8go.Value {
 	res, err := bridge.JsValue(info.Context(), data)
 	if err != nil {
-		msg := fmt.Sprintf("Query: %s", err.Error())
+		msg := fmt.Sprintf("Query: %+v", err)
 		log.Error(msg)
 		return bridge.JsException(info.Context(), msg)
 	}

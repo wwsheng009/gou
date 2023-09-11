@@ -1,7 +1,11 @@
 package v8
 
 import (
+	"fmt"
+
 	"github.com/yaoapp/gou/runtime/v8/bridge"
+	"github.com/yaoapp/kun/exception"
+	"github.com/yaoapp/kun/log"
 	"rogchap.com/v8go"
 )
 
@@ -34,7 +38,13 @@ func Require(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		defer ctx.Close()
 
 		globalName := "require"
-		info.Context().RunScript(Transform(script.Source, globalName), script.File)
+		_, err := info.Context().RunScript(Transform(script.Source, globalName), script.File)
+		if err != nil {
+			message := fmt.Sprintf("failed to require file:%s, error:\n %+v.", script.File, err)
+			log.Error("[V8] process error. %s", message)
+			exception.New(fmt.Sprintf("%+v", err), 500).Throw()
+		}
+
 		global, _ := info.Context().Global().Get(globalName)
 		return global
 	})

@@ -22,7 +22,7 @@ func (e *Exception) ExportObject(iso *v8go.Isolate) *v8go.ObjectTemplate {
 	tmpl.Set("Code", v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		code, err := info.This().Get("code")
 		if err != nil {
-			log.Error("Exception: %s", err.Error())
+			log.Error("Exception: %+v", err)
 		}
 		return code
 	}))
@@ -30,7 +30,7 @@ func (e *Exception) ExportObject(iso *v8go.Isolate) *v8go.ObjectTemplate {
 	tmpl.Set("Message", v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		message, err := info.This().Get("message")
 		if err != nil {
-			log.Error("Exception: %s", err.Error())
+			log.Error("Exception: %+v", err)
 		}
 		return message
 	}))
@@ -62,17 +62,17 @@ func (e *Exception) ExportFunction(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		if errorObj.IsFunction() {
 			fn, err := errorObj.AsFunction()
 			if err != nil {
-				log.Error("Exception: %s", err.Error())
+				log.Error("Exception: %+v", err)
 			}
 
 			v, err := fn.Call(v8go.Undefined(ctx.Isolate()), message)
 			if err != nil {
-				log.Error("Exception: %s", err.Error())
+				log.Error("Exception: %+v", err)
 			}
 
 			obj, err := v.AsObject()
 			if err != nil {
-				log.Error("Exception: %s", err.Error())
+				log.Error("Exception: %+v", err)
 			}
 
 			// extend error object
@@ -84,22 +84,22 @@ func (e *Exception) ExportFunction(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		object := e.ExportObject(iso)
 		this, err := object.NewInstance(info.Context())
 		if err != nil {
-			log.Error("Exception: %s", err.Error())
+			log.Error("Exception: %+v", err)
 			return nil
 		}
 		err = this.Set("message", message)
 		if err != nil {
-			log.Error("Exception: %s", err.Error())
+			log.Error("Exception: %+v", err)
 		}
 
 		err = this.Set("code", code)
 		if err != nil {
-			log.Error("Exception: %s", err.Error())
+			log.Error("Exception: %+v", err)
 		}
 
 		err = this.Set("name", "Exception")
 		if err != nil {
-			log.Error("Exception: %s", err.Error())
+			log.Error("Exception: %+v", err)
 		}
 		return this.Value
 	})

@@ -58,7 +58,7 @@ func (obj *Object) run(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		if len(args) > 0 {
 			goArgs, err = bridge.GoValues(args, info.Context())
 			if err != nil {
-				msg := fmt.Sprintf("console.log: %s", err.Error())
+				msg := fmt.Sprintf("console.log: %+v", err)
 				log.Error(msg)
 				return bridge.JsException(info.Context(), msg)
 			}

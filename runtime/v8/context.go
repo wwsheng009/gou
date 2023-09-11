@@ -53,7 +53,7 @@ func (ctx *Context) Call(method string, args ...interface{}) (interface{}, error
 	global := ctx.Context.Global()
 	jsArgs, err := bridge.JsValues(ctx.Context, args)
 	if err != nil {
-		return nil, fmt.Errorf("%s.%s %s", ctx.ID, method, err.Error())
+		return nil, fmt.Errorf("%s.%s %+v", ctx.ID, method, err)
 	}
 
 	defer bridge.FreeJsValues(jsArgs)
@@ -70,12 +70,12 @@ func (ctx *Context) Call(method string, args ...interface{}) (interface{}, error
 
 	jsRes, err := global.MethodCall(method, bridge.Valuers(jsArgs)...)
 	if err != nil {
-		return nil, fmt.Errorf("%s.%s %s", ctx.ID, method, err.Error())
+		return nil, fmt.Errorf("%s.%s %+v", ctx.ID, method, err)
 	}
 
 	goRes, err := bridge.GoValue(jsRes, ctx.Context)
 	if err != nil {
-		return nil, fmt.Errorf("%s.%s %s", ctx.ID, method, err.Error())
+		return nil, fmt.Errorf("%s.%s %+v", ctx.ID, method, err)
 	}
 
 	return goRes, nil
@@ -87,14 +87,14 @@ func (ctx *Context) CallWith(context context.Context, method string, args ...int
 	global := ctx.Context.Global()
 	jsArgs, err := bridge.JsValues(ctx.Context, args)
 	if err != nil {
-		return nil, fmt.Errorf("%s.%s %s", ctx.ID, method, err.Error())
+		return nil, fmt.Errorf("%s.%s %+v", ctx.ID, method, err)
 	}
 
 	defer bridge.FreeJsValues(jsArgs)
 
 	jsData, err := ctx.setData(global)
 	if err != nil {
-		return nil, fmt.Errorf("%s.%s %s", ctx.ID, method, err.Error())
+		return nil, fmt.Errorf("%s.%s %+v", ctx.ID, method, err)
 	}
 	defer func() {
 		if !jsData.IsNull() && !jsData.IsUndefined() {
@@ -141,7 +141,7 @@ func (ctx *Context) CallWith(context context.Context, method string, args ...int
 		return nil, context.Err()
 
 	case err := <-errChan:
-		return nil, fmt.Errorf("%s.%s %s", ctx.ID, method, err.Error())
+		return nil, fmt.Errorf("%s.%s %+v", ctx.ID, method, err)
 
 	case goRes := <-resChan:
 		return goRes, nil

@@ -351,7 +351,7 @@ func (fun FunctionT) String() string {
 func (promise PromiseT) String() string {
 	p, err := promise.value.AsPromise()
 	if err != nil {
-		return fmt.Sprintf("%s", err.Error())
+		return fmt.Sprintf("%+v", err)
 	}
 
 	var state string = "pending"

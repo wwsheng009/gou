@@ -213,7 +213,7 @@ func (store *Store) getDel(iso *v8go.Isolate) *v8go.FunctionTemplate {
 
 		res, err := bridge.JsValue(info.Context(), value)
 		if err != nil {
-			msg := fmt.Sprintf("Cache Get: %s", err.Error())
+			msg := fmt.Sprintf("Cache Get: %+v", err)
 			log.Error(msg)
 			return bridge.JsException(info.Context(), msg)
 		}
@@ -262,7 +262,7 @@ func (store *Store) has(iso *v8go.Isolate) *v8go.FunctionTemplate {
 
 		res, err := v8go.NewValue(info.Context().Isolate(), has)
 		if err != nil {
-			msg := fmt.Sprintf("Cache Has: %s", err.Error())
+			msg := fmt.Sprintf("Cache Has: %+v", err)
 			log.Error(msg)
 			return bridge.JsException(info.Context(), msg)
 		}
@@ -282,7 +282,7 @@ func (store *Store) len(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		len := c.Len()
 		res, err := v8go.NewValue(info.Context().Isolate(), int32(len))
 		if err != nil {
-			msg := fmt.Sprintf("Cache Len: %s", err.Error())
+			msg := fmt.Sprintf("Cache Len: %+v", err)
 			log.Error(msg)
 			return bridge.JsException(info.Context(), msg)
 		}
@@ -302,7 +302,7 @@ func (store *Store) keys(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		keys := c.Keys()
 		res, err := bridge.JsValue(info.Context(), keys)
 		if err != nil {
-			msg := fmt.Sprintf("Cache Keys: %s", err.Error())
+			msg := fmt.Sprintf("Cache Keys: %+v", err)
 			log.Error(msg)
 			return bridge.JsException(info.Context(), msg)
 		}

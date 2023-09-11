@@ -806,7 +806,7 @@ func (obj *Object) arrayBufferValue(info *v8go.FunctionCallbackInfo, value []byt
 }
 
 func (obj *Object) error(info *v8go.FunctionCallbackInfo, err error) *v8go.Value {
-	return obj.errorString(info, fmt.Sprintf("File System: %s", err.Error()))
+	return obj.errorString(info, fmt.Sprintf("File System: %+v", err))
 }
 
 func (obj *Object) errorString(info *v8go.FunctionCallbackInfo, err string) *v8go.Value {
