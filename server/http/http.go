@@ -69,7 +69,7 @@ func (server *Server) Start() error {
 	var listener net.Listener
 	var err error
 	addr := fmt.Sprintf("%s:%d", server.option.Host, server.option.Port)
-	listener, err = net.Listen("tcp4", addr)
+	listener, err = net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("[Server] %s %s", addr, err.Error())
 		server.status = CREATED
