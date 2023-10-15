@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/yaoapp/gou/process"
+	"github.com/yaoapp/kun/log"
 )
 
 // SessionHandlers 模型运行器
@@ -65,14 +66,18 @@ func processSet(process *process.Process) interface{} {
 	process.ValidateArgNums(2)
 	ss := setSession(process)
 	if process.NumOfArgs() == 3 {
+		log.Debug("set sessio ttl KEY: %s, VALUE: %v, TS: %d", process.ArgsString(0), process.Args[1], process.ArgsInt(2))
 		ss.MustSetWithEx(process.ArgsString(0), process.Args[1], time.Duration(process.ArgsInt(2))*time.Second)
 		return nil
 
 	} else if process.NumOfArgs() == 4 {
+		log.Debug("set session id & ttl ID: %s KEY: %s, VALUE: %v, TS: %d", process.ArgsString(3), process.ArgsString(0), process.Args[1], process.ArgsInt(2))
 		ss = Global().ID(process.ArgsString(3))
 		ss.MustSetWithEx(process.ArgsString(0), process.Args[1], time.Duration(process.ArgsInt(2))*time.Second)
+		return nil
 	}
 
+	log.Debug("set session KEY: %s, VALUE: %v", process.ArgsString(0), process.Args[1])
 	ss.MustSet(process.ArgsString(0), process.Args[1])
 	return nil
 }
