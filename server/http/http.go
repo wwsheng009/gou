@@ -69,6 +69,7 @@ func (server *Server) Start() error {
 	var listener net.Listener
 	var err error
 	addr := fmt.Sprintf("%s:%d", server.option.Host, server.option.Port)
+	//0.0.0.0会默认绑定到ip6上
 	listener, err = net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("[Server] %s %s", addr, err.Error())
