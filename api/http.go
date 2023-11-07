@@ -219,7 +219,7 @@ func (http HTTP) setCorsOption(path string, allows map[string]bool, router gin.I
 	}
 	registeredOptions[fmt.Sprintf("%s.%s", http.Name, path)] = true
 	http.method("OPTIONS", path, router, func(c *gin.Context) {
-		referer := c.Request.Referer()
+		referer := getOrigin(c) //c.Request.Referer()
 		if referer != "" {
 			if !IsAllowed(c, allows) {
 				c.AbortWithStatus(403)
