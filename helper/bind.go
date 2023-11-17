@@ -60,6 +60,12 @@ func Bind(v interface{}, data map[string]interface{}, vars ...*regexp.Regexp) in
 			if length == 1 { // "{{in.0}}"
 				name := input[matches[0][2]:matches[0][3]]
 				res = data[name]
+				var sb strings.Builder
+				sb.WriteString(input[0:matches[0][0]])
+				val := fmt.Sprintf("%s", res)
+				sb.WriteString(val)
+				sb.WriteString(input[matches[0][1]:])
+				res = sb.String()
 				break
 			} else if length > 1 {
 				var sb strings.Builder
