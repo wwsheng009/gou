@@ -266,7 +266,11 @@ func (path Path) setResponseHeaders(c *gin.Context, resp interface{}, contentTyp
 				v := helper.Bind(value, data)
 				if v != nil {
 					c.Writer.Header().Set(name, fmt.Sprintf("%v", v))
+					if name == "Content-Type" {
+						contentType = fmt.Sprintf("%v", v)
+					}
 				}
+
 			}
 		} else {
 			for name, value := range path.Out.Headers {
