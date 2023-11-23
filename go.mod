@@ -79,6 +79,7 @@ require (
 require (
 	github.com/evanw/esbuild v0.19.3
 	github.com/google/uuid v1.4.0
+	golang.org/x/image v0.14.0
 )
 
 require (
@@ -90,7 +91,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.6.0 // indirect
-	golang.org/x/image v0.14.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
 )
 
