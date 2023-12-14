@@ -147,8 +147,10 @@ func (path Path) streamHandler(getArgs func(c *gin.Context) []interface{}) func(
 				return false
 
 			case msg := <-chanStream:
-				log.Trace("[Stream] %s %s %s %v", path.Path, path.Process, msg.Name, msg.Message)
-				c.SSEvent(msg.Name, msg.Message)
+				if msg.Message != nil {
+					log.Trace("[Stream] %s %s %s %v", path.Path, path.Process, msg.Name, msg.Message)
+					c.SSEvent(msg.Name, msg.Message)
+				}
 				return true
 
 			case <-ctx.Done():
