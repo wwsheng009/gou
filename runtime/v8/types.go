@@ -65,3 +65,36 @@ const (
 	// IsoBusy isolate is in used
 	IsoBusy uint8 = 1
 )
+
+type HeapStatistics struct {
+	TotalHeapSize               uint64 `json:"TotalHeapSize,omitempty"`
+	TotalHeapSizeExecutable     uint64 `json:"TotalHeapSizeExecutable,omitempty"`
+	TotalPhysicalSize           uint64 `json:"TotalPhysicalSize,omitempty"`
+	TotalAvailableSize          uint64 `json:"TotalAvailableSize,omitempty"`
+	UsedHeapSize                uint64 `json:"UsedHeapSize,omitempty"`
+	HeapSizeLimit               uint64 `json:"HeapSizeLimit,omitempty"`
+	MallocedMemory              uint64 `json:"MallocedMemory,omitempty"`
+	ExternalMemory              uint64 `json:"ExternalMemory,omitempty"`
+	PeakMallocedMemory          uint64 `json:"PeakMallocedMemory,omitempty"`
+	NumberOfNativeContexts      uint64 `json:"NumberOfNativeContexts,omitempty"`
+	NumberOfDetachedContexts    uint64 `json:"NumberOfDetachedContexts,omitempty"`
+	TotalHeapSizeOver           bool   `json:"TotalHeapSizeOver,omitempty"`
+	TotalAvailableSizeNotEnough bool   `json:"TotalAvailableSizeNotEnough,omitempty"`
+	NotHealth                   bool   `json:"NotHealth,omitempty"`
+}
+
+type HeapTotalStatistics struct {
+	Length                   uint64 `json:"Length,omitempty"`
+	Count                    uint64 `json:"Count,omitempty"`
+	TotalHeapSize            uint64 `json:"TotalHeapSize,omitempty"`
+	TotalHeapSizeExecutable  uint64 `json:"TotalHeapSizeExecutable,omitempty"`
+	TotalPhysicalSize        uint64 `json:"TotalPhysicalSize,omitempty"`
+	TotalAvailableSize       uint64 `json:"TotalAvailableSize,omitempty"`
+	UsedHeapSize             uint64 `json:"UsedHeapSize,omitempty"`
+	HeapSizeLimit            uint64 `json:"HeapSizeLimit,omitempty"`
+	MallocedMemory           uint64 `json:"MallocedMemory,omitempty"`
+	ExternalMemory           uint64 `json:"ExternalMemory,omitempty"`
+	PeakMallocedMemory       uint64 `json:"PeakMallocedMemory,omitempty"`
+	NumberOfNativeContexts   uint64 `json:"NumberOfNativeContexts,omitempty"`
+	NumberOfDetachedContexts uint64 `json:"NumberOfDetachedContexts,omitempty"`
+}

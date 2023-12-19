@@ -236,3 +236,31 @@ func (iso *Isolate) health() bool {
 
 	return true
 }
+
+func (iso *Isolate) HeapStat() HeapStatistics {
+	v8Stat := iso.Isolate.GetHeapStatistics()
+
+	stat := HeapStatistics{}
+	stat.TotalHeapSize = v8Stat.TotalHeapSize
+	stat.TotalHeapSizeExecutable = v8Stat.TotalHeapSizeExecutable
+	stat.TotalPhysicalSize = v8Stat.TotalPhysicalSize
+	stat.TotalAvailableSize = v8Stat.TotalAvailableSize
+	stat.UsedHeapSize = v8Stat.UsedHeapSize
+	stat.HeapSizeLimit = v8Stat.HeapSizeLimit
+	stat.MallocedMemory = v8Stat.MallocedMemory
+	stat.ExternalMemory = v8Stat.ExternalMemory
+	stat.PeakMallocedMemory = v8Stat.PeakMallocedMemory
+	stat.NumberOfNativeContexts = v8Stat.NumberOfNativeContexts
+	stat.NumberOfDetachedContexts = v8Stat.NumberOfDetachedContexts
+	if v8Stat.TotalHeapSize > runtimeOption.HeapSizeRelease {
+		stat.TotalHeapSizeOver = true
+	}
+	if v8Stat.TotalAvailableSize < runtimeOption.HeapAvailableSize { // 500M
+		stat.TotalAvailableSizeNotEnough = true
+	}
+	if stat.TotalHeapSizeOver || stat.TotalAvailableSizeNotEnough {
+		stat.NotHealth = true
+	}
+
+	return stat
+}

@@ -11,6 +11,12 @@ import (
 func init() {
 	process.Register("scripts", processScripts)
 	process.Register("studio", processStudio)
+	process.Register("runtime.v8.stats", processV8IsoStats)
+	process.Register("runtime.v8.statTotal", processV8TotalStat)
+	process.Register("runtime.v8.option", processV8Option)
+	process.Register("runtime.v8.restart", processV8Restart)
+	process.Register("runtime.v8.stop", processV8Stop)
+	process.Register("runtime.v8.Start", processV8Start)
 }
 
 // processScripts
@@ -63,4 +69,53 @@ func processStudio(process *process.Process) interface{} {
 	}
 
 	return res
+}
+func processV8TotalStat(process *process.Process) interface{} {
+	total := HeapTotalStatistics{}
+	isolates.Range(func(iso *Isolate) bool {
+		stat := iso.HeapStat()
+		total.TotalHeapSize += stat.TotalHeapSize
+		total.TotalHeapSizeExecutable += stat.TotalHeapSizeExecutable
+		total.TotalPhysicalSize += stat.TotalPhysicalSize
+		total.TotalAvailableSize += stat.TotalAvailableSize
+		total.UsedHeapSize += stat.UsedHeapSize
+		total.HeapSizeLimit += stat.HeapSizeLimit
+		total.MallocedMemory += stat.MallocedMemory
+		total.ExternalMemory += stat.ExternalMemory
+		total.PeakMallocedMemory += stat.PeakMallocedMemory
+		total.NumberOfNativeContexts += stat.NumberOfNativeContexts
+		total.NumberOfDetachedContexts += stat.NumberOfDetachedContexts
+		total.Count += 1
+		return true
+	})
+	total.Length = uint64(isolates.Len)
+
+	return total
+}
+func processV8IsoStats(process *process.Process) interface{} {
+	stats := make([]HeapStatistics, 0)
+	isolates.Range(func(iso *Isolate) bool {
+		stats = append(stats, iso.HeapStat())
+		return true
+	})
+	return stats
+}
+
+func processV8Option(process *process.Process) interface{} {
+	return runtimeOption
+}
+
+func processV8Stop(process *process.Process) interface{} {
+	Stop()
+	return nil
+}
+func processV8Start(process *process.Process) interface{} {
+	Start(runtimeOption)
+	return nil
+}
+func processV8Restart(process *process.Process) interface{} {
+	Stop()
+
+	Start(runtimeOption)
+	return nil
 }
