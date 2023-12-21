@@ -107,15 +107,15 @@ func processV8Option(process *process.Process) interface{} {
 
 func processV8Stop(process *process.Process) interface{} {
 	Stop()
-	return nil
+	return map[string]interface{}{"status": "ok"}
 }
 func processV8Start(process *process.Process) interface{} {
 	Start(runtimeOption)
-	return nil
+	return map[string]interface{}{"status": "ok"}
 }
 func processV8Restart(process *process.Process) interface{} {
 	Stop()
 
 	Start(runtimeOption)
-	return nil
+	return map[string]interface{}{"status": "ok"}
 }
