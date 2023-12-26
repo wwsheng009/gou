@@ -140,20 +140,23 @@ func processStudio(process *process.Process) interface{} {
 }
 func processV8TotalStat(process *process.Process) interface{} {
 	total := HeapTotalStatistics{}
-	isolates.Range(func(iso *Isolate) bool {
-		stat := iso.HeapStat()
-		total.TotalHeapSize += stat.TotalHeapSize
-		total.TotalHeapSizeExecutable += stat.TotalHeapSizeExecutable
-		total.TotalPhysicalSize += stat.TotalPhysicalSize
-		total.TotalAvailableSize += stat.TotalAvailableSize
-		total.UsedHeapSize += stat.UsedHeapSize
-		total.HeapSizeLimit += stat.HeapSizeLimit
-		total.MallocedMemory += stat.MallocedMemory
-		total.ExternalMemory += stat.ExternalMemory
-		total.PeakMallocedMemory += stat.PeakMallocedMemory
-		total.NumberOfNativeContexts += stat.NumberOfNativeContexts
-		total.NumberOfDetachedContexts += stat.NumberOfDetachedContexts
-		total.Count += 1
+	isolates.Data.Range(func(key, value any) bool {
+		if iso, ok := key.(*Isolate); ok {
+			stat := iso.HeapStat()
+			total.TotalHeapSize += stat.TotalHeapSize
+			total.TotalHeapSizeExecutable += stat.TotalHeapSizeExecutable
+			total.TotalPhysicalSize += stat.TotalPhysicalSize
+			total.TotalAvailableSize += stat.TotalAvailableSize
+			total.UsedHeapSize += stat.UsedHeapSize
+			total.HeapSizeLimit += stat.HeapSizeLimit
+			total.MallocedMemory += stat.MallocedMemory
+			total.ExternalMemory += stat.ExternalMemory
+			total.PeakMallocedMemory += stat.PeakMallocedMemory
+			total.NumberOfNativeContexts += stat.NumberOfNativeContexts
+			total.NumberOfDetachedContexts += stat.NumberOfDetachedContexts
+			total.Count += 1
+		}
+
 		return true
 	})
 	total.Length = uint64(isolates.Len)
@@ -162,8 +165,10 @@ func processV8TotalStat(process *process.Process) interface{} {
 }
 func processV8IsoStats(process *process.Process) interface{} {
 	stats := make([]HeapStatistics, 0)
-	isolates.Range(func(iso *Isolate) bool {
-		stats = append(stats, iso.HeapStat())
+	isolates.Data.Range(func(key, value any) bool {
+		if iso, ok := key.(*Isolate); ok {
+			stats = append(stats, iso.HeapStat())
+		}
 		return true
 	})
 	return stats
