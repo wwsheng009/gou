@@ -278,22 +278,23 @@ func (script *Script) execStandard(process *process.Process) interface{} {
 	})
 	if err != nil {
 		log.Error("scripts.%s.%s %s", script.ID, process.Method, err.Error())
-		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
+		exception.New("scripts.%s.%s %+v", 500, script.ID, process.Method, err).Throw()
 		return nil
 	}
 
 	// console.log("foo", "bar", 1, 2, 3, 4)
 	err = console.New().Set("console", ctx)
 	if err != nil {
-		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
+		exception.New("scripts.%s.%s %+v", 500, script.ID, process.Method, err).Throw()
 		return nil
 	}
 
 	// Run the method
 	jsArgs, err := bridge.JsValues(ctx, process.Args)
 	if err != nil {
-		log.Error("scripts.%s.%s %s", script.ID, process.Method, err.Error())
-		exception.New(err.Error(), 500).Throw()
+		log.Error("scripts.%s.%s %+v", script.ID, process.Method, err)
+		exception.New("scripts.%s.%s %+v", 500, script.ID, process.Method, err).Throw()
+		// exception.New(err.Error(), 500).Throw()
 		return nil
 
 	}
@@ -301,15 +302,17 @@ func (script *Script) execStandard(process *process.Process) interface{} {
 
 	jsRes, err := global.MethodCall(process.Method, bridge.Valuers(jsArgs)...)
 	if err != nil {
-		log.Error("scripts.%s.%s %s", script.ID, process.Method, err.Error())
-		exception.Err(err, 500).Throw()
+		log.Error("scripts.%s.%s %+v", script.ID, process.Method, err)
+		exception.New("scripts.%s.%s %+v", 500, script.ID, process.Method, err).Throw()
+		// exception.Err(err, 500).Throw()
 		return nil
 	}
 
 	goRes, err := bridge.GoValue(jsRes, ctx)
 	if err != nil {
-		log.Error("scripts.%s.%s %s", script.ID, process.Method, err.Error())
-		exception.New(err.Error(), 500).Throw()
+		log.Error("scripts.%s.%s %+v", script.ID, process.Method, err)
+		exception.New("scripts.%s.%s %+v", 500, script.ID, process.Method, err).Throw()
+		// exception.New(err.Error(), 500).Throw()
 		return nil
 	}
 
