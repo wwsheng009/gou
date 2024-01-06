@@ -251,7 +251,12 @@ func (path Path) runStreamScript(ctx context.Context, c *gin.Context, getArgs fu
 }
 
 func (path Path) execProcess(ctx context.Context, chRes chan<- interface{}, c *gin.Context, getArgs func(c *gin.Context) []interface{}) {
-
+	defer func() {
+		err := exception.Catch(recover())
+		if err != nil {
+			chRes <- err
+		}
+	}()
 	var args []interface{} = getArgs(c)
 	var process, err = process.Of(path.Process, args...)
 	if err != nil {

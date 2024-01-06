@@ -417,7 +417,9 @@ func (http HTTP) parseIn(in []interface{}) func(c *gin.Context) []interface{} {
 			getValues = append(getValues, func(c *gin.Context) interface{} {
 
 				file, err := c.FormFile(arg[1])
-
+				if err != nil {
+					exception.New("读取上传文件出错 %s", 500, err).Throw()
+				}
 				ext := filepath.Ext(file.Filename)
 
 				if err != nil {
