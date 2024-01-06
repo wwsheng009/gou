@@ -214,13 +214,17 @@ func (t *Task) start(job *Job) {
 
 func (t *Task) nextID() int {
 	if t.handlers.NextID == nil {
-		return len(t.pool.jobque) + 1
+		t.Count += 1
+		return t.Count
+		// return len(t.pool.jobque) + 1
 	}
 
 	id, err := t.handlers.NextID()
 	if err != nil {
 		log.Error("[TASK] %s can't get next id (%s)", t.name, err.Error())
-		return len(t.pool.jobque) + 1
+		t.Count += 1
+		return t.Count
+		// return len(t.pool.jobque) + 1
 	}
 	return id
 }

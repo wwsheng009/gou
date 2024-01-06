@@ -24,7 +24,7 @@ var status = map[int]string{
 	WAITING: "WAITING",
 	RUNNING: "RUNNING",
 	SUCCESS: "SUCCESS",
-	FAILURE: "SUCCESS",
+	FAILURE: "FAILURE",
 }
 
 // Task the task struct
@@ -38,6 +38,7 @@ type Task struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	Option   Option
+	Count    int //job counter inside
 }
 
 // Option the task option
