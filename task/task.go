@@ -70,8 +70,10 @@ func (t *Task) Start() {
 			worker := <-t.pool.workerque
 			worker.job <- job
 		case <-interrupt:
+			log.Trace("[TASK] %s job interrupt", t.name)
 			return
 		case <-t.ctx.Done():
+			log.Trace("[TASK] %s job Done", t.name)
 			return
 		}
 	}
@@ -158,6 +160,7 @@ func (t *Task) startWorker(w *Worker) {
 			case job := <-w.job:
 				t.start(job)
 			case <-t.ctx.Done(): // quit worker when the task is canceled
+				log.Trace("[TASK] %s worker done", t.name)
 				return
 			}
 		}
