@@ -164,30 +164,27 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 
 	switch v := value.(type) {
 
-	case string, int32, uint32, bool, *big.Int, float64:
+	case string, int32, uint32, bool, *big.Int, float64, int64, uint64:
 		return v8go.NewValue(ctx.Isolate(), v)
 
 	case []byte:
-		newObj, err := ctx.RunScript(fmt.Sprintf("new Uint8Array(%d)", len(v)), "")
-		if err != nil {
-			return nil, err
-		}
 
-		jsObj, err := newObj.AsObject()
-		if err != nil {
-			return nil, err
-		}
+		return v8go.NewValue(ctx.Isolate(), v)
 
-		for i := 0; i < len(v); i++ {
-			jsObj.SetIdx(uint32(i), uint32(v[i]))
-		}
-		return jsObj.Value, nil
+		// newObj, err := ctx.RunScript(fmt.Sprintf("new Uint8Array(%d)", len(v)), "")
+		// if err != nil {
+		// 	return nil, err
+		// }
 
-	case int64:
-		return v8go.NewValue(ctx.Isolate(), int32(v))
+		// jsObj, err := newObj.AsObject()
+		// if err != nil {
+		// 	return nil, err
+		// }
 
-	case uint64:
-		return v8go.NewValue(ctx.Isolate(), int32(v))
+		// for i := 0; i < len(v); i++ {
+		// 	jsObj.SetIdx(uint32(i), uint32(v[i]))
+		// }
+		// return jsObj.Value, nil
 
 	case int:
 		return v8go.NewValue(ctx.Isolate(), int32(v))
@@ -199,13 +196,13 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 		return v8go.NewValue(ctx.Isolate(), int32(v))
 
 	case uint:
-		return v8go.NewValue(ctx.Isolate(), int32(v))
+		return v8go.NewValue(ctx.Isolate(), uint32(v))
 
 	case uint8:
-		return v8go.NewValue(ctx.Isolate(), int32(v))
+		return v8go.NewValue(ctx.Isolate(), uint32(v))
 
 	case uint16:
-		return v8go.NewValue(ctx.Isolate(), int32(v))
+		return v8go.NewValue(ctx.Isolate(), uint32(v))
 
 	case float32:
 		return v8go.NewValue(ctx.Isolate(), float64(v))
