@@ -347,7 +347,9 @@ func goValueParse(value *v8go.Value, v interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	if data == nil {
+		return nil, fmt.Errorf("js json object type not support")
+	}
 	ptr := &v
 	err = jsoniter.Unmarshal(data, ptr)
 	if err != nil {
