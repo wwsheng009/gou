@@ -164,7 +164,7 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 
 	switch v := value.(type) {
 
-	case string, int32, uint32, bool, *big.Int, float64, int64, uint64:
+	case string, int32, uint32, bool, *big.Int, float64:
 		return v8go.NewValue(ctx.Isolate(), v)
 
 	case []byte:
@@ -185,6 +185,16 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 		// 	jsObj.SetIdx(uint32(i), uint32(v[i]))
 		// }
 		// return jsObj.Value, nil
+
+	//int64=>int32,虽然会有精度的丢失，但是为会保证转换顺序，如果直接转换成int64,在js中会变成了bigint,
+	//再次转换到go就会出错。64位的数字最好是使用string表示。
+	case int64:
+		return v8go.NewValue(ctx.Isolate(), int32(v))
+
+	//uint64=>uint32,虽然会有精度的丢失，但是为会保证转换顺序，如果直接转换成int64,在js中会变成了bigint,
+	//再次转换到go就会出错。64位的数字最好是使用string表示。
+	case uint64:
+		return v8go.NewValue(ctx.Isolate(), uint32(v))
 
 	case int:
 		return v8go.NewValue(ctx.Isolate(), int32(v))
