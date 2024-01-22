@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 
 	jsoniter "github.com/json-iterator/go"
@@ -189,12 +190,19 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 	//int64=>int32,虽然会有精度的丢失，但是为会保证转换顺序，如果直接转换成int64,在js中会变成了bigint,
 	//再次转换到go就会出错。64位的数字最好是使用string表示。
 	case int64:
-		return v8go.NewValue(ctx.Isolate(), int32(v))
-
+		if v >= math.MinInt32 && v <= math.MaxInt32 {
+			return v8go.NewValue(ctx.Isolate(), int32(v))
+		} else {
+			return v8go.NewValue(ctx.Isolate(), v)
+		}
 	//uint64=>uint32,虽然会有精度的丢失，但是为会保证转换顺序，如果直接转换成int64,在js中会变成了bigint,
 	//再次转换到go就会出错。64位的数字最好是使用string表示。
 	case uint64:
-		return v8go.NewValue(ctx.Isolate(), uint32(v))
+		if v >= math.MaxUint32 && v <= math.MaxUint32 {
+			return v8go.NewValue(ctx.Isolate(), uint32(v))
+		} else {
+			return v8go.NewValue(ctx.Isolate(), v)
+		}
 
 	case int:
 		return v8go.NewValue(ctx.Isolate(), int32(v))
