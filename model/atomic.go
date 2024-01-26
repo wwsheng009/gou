@@ -362,8 +362,8 @@ func (mod *Model) UpdateWhere(param QueryParam, row maps.MapStrAny) (int, error)
 		}
 	}
 
-	// 如果不是 SQLite3 添加字段
-	if mod.Driver != "sqlite3" {
+	// 如果不是 SQLite3 添加字段,只是mysql
+	if mod.Driver == "mysql" {
 		for name, value := range row {
 			if !strings.Contains(name, ".") {
 				new := fmt.Sprintf("%s.%s", mod.MetaData.Table.Name, name)
