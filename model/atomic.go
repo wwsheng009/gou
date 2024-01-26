@@ -97,7 +97,7 @@ func (mod *Model) Create(row maps.MapStrAny) (int, error) {
 
 	id, err := capsule.Query().
 		Table(mod.MetaData.Table.Name).
-		InsertGetID(row)
+		InsertGetID(row, mod.PrimaryKey) //for non id field
 
 	if err != nil {
 		return 0, err
@@ -214,7 +214,7 @@ func (mod *Model) Save(row maps.MapStrAny) (interface{}, error) {
 
 	id, err := capsule.Query().
 		Table(mod.MetaData.Table.Name).
-		InsertGetID(row)
+		InsertGetID(row, mod.PrimaryKey) //for non id field
 
 	if err != nil {
 		return 0, err
