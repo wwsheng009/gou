@@ -19,7 +19,7 @@ import (
 var FileSystemHandlers = map[string]process.Handler{
 	"readfile":        processReadFile,
 	"readfilebuffer":  processReadFileBuffer,
-	"writefile":       processWirteFile,
+	"writefile":       processWriteFile,
 	"writefilebuffer": processWriteFileBuffer,
 	"readdir":         processReadDir,
 	"mkdir":           processMkdir,
@@ -78,7 +78,7 @@ func processReadFileBuffer(process *process.Process) interface{} {
 	return data
 }
 
-func processWirteFile(process *process.Process) interface{} {
+func processWriteFile(process *process.Process) interface{} {
 	process.ValidateArgNums(2)
 	stor := stor(process)
 	file := process.ArgsString(0)
