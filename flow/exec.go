@@ -23,10 +23,11 @@ func (flow *Flow) Exec(args ...interface{}) (interface{}, error) {
 		In:      args,
 	}
 
-	flowProcess := "flows." + flow.Name
+	// flowProcess := "flows." + flow.Name
+	flowProcess := "flows." + flow.ID;
 	for i, node := range flow.Nodes {
 
-		if strings.HasPrefix(node.Process, flowProcess) {
+		if strings.HasPrefix(strings.ToLower(node.Process), flowProcess) {
 			return nil, fmt.Errorf("cannot call self flow(%s)", node.Process)
 		}
 

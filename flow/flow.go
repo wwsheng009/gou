@@ -58,13 +58,13 @@ func (flow *Flow) prepare() {
 
 // Reload 重新载入API
 func (flow *Flow) Reload() (*Flow, error) {
-	new, err := Load(flow.File, flow.Name)
+	new, err := Load(flow.File, flow.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	flow = new
-	Flows[flow.Name] = new
+	Flows[flow.ID] = new
 	return flow, nil
 }
 
