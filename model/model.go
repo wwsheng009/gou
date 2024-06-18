@@ -157,10 +157,10 @@ func (mod *Model) Reload() (*Model, error) {
 }
 
 // Migrate 数据迁移
-func (mod *Model) Migrate(force bool) error {
-	if mod.MetaData.Option.Readonly {
-		log.Info("read only model,ignore migrate: %s", mod.Name)
-		return nil
+func (mod *Model) Migrate(force bool, opts ...MigrateOption) error {
+	options := &MigrateOptions{}
+	for _, opt := range opts {
+		opt(options)
 	}
 	if force {
 		err := mod.DropTable()
@@ -180,17 +180,31 @@ func (mod *Model) Migrate(force bool) error {
 			return err
 		}
 
-		_, errs := mod.InsertValues()
-		if errs != nil && len(errs) > 0 {
-			for _, err := range errs {
-				log.Error("[Migrate] %s", err.Error())
+		if !options.DonotInsertValues {
+			_, errs := mod.InsertValues()
+			if errs != nil && len(errs) > 0 {
+				for _, err := range errs {
+					log.Error("[Migrate] %s", err.Error())
+				}
+				return fmt.Errorf("%d values error, please check the logs", len(errs))
 			}
-			return fmt.Errorf("%d values error, please check the logs", len(errs))
 		}
 		return nil
 	}
 
 	return mod.SaveTable()
+}
+
+type MigrateOptions struct {
+	DonotInsertValues bool `json:"donot_insert_values"`
+}
+
+type MigrateOption func(*MigrateOptions)
+
+func WithDonotInsertValues(v bool) MigrateOption {
+	return func(mo *MigrateOptions) {
+		mo.DonotInsertValues = v
+	}
 }
 
 // Select 读取已加载模型
