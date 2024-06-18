@@ -33,6 +33,7 @@ var DownloadWhitelist = map[string]bool{
 	"docx":   true,
 	"png":    true,
 	"jpg":    true,
+	"jpeg":   true,
 	"bmp":    true,
 	"svg":    true,
 	"tif":    true,
@@ -265,7 +266,7 @@ func Zip(xfs FileSystem, name string, target string) error {
 
 	root := xfs.Root()
 	absPath := filepath.Join(root, name)
-	basePath := filepath.Base(absPath)
+	// basePath := filepath.Base(absPath)
 	targetPath := filepath.Join(root, target)
 
 	targetWriter, err := os.Create(targetPath)
@@ -282,7 +283,7 @@ func Zip(xfs FileSystem, name string, target string) error {
 			return err
 		}
 
-		zipPath := strings.TrimPrefix(path, filepath.Join(root, basePath))
+		zipPath := strings.TrimPrefix(path, absPath)
 		if zipPath == "" {
 			return nil
 		}
