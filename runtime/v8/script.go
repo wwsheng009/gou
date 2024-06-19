@@ -234,6 +234,9 @@ func loadModule(file string, tsCode string) error {
 	}
 
 	globalName := strings.ReplaceAll(strings.ReplaceAll(file, "/", "_"), ".", "_")
+	// fix the windows path error
+	globalName = strings.ReplaceAll(globalName, "\\", "_")
+
 	entryPoints := []entry{}
 	loaded := map[string]bool{}
 	tsCode, entryPoints, err := getEntryPoints(file, tsCode, loaded)
