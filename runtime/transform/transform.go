@@ -21,13 +21,32 @@ func TypeScript(tsCode string, option api.TransformOptions) (string, error) {
 	return string(result.Code), nil
 }
 
+// JavaScript transform the javascript code
+func JavaScript(jsCode string, option api.TransformOptions) (string, error) {
+	result := api.Transform(jsCode, option)
+	if len(result.Errors) > 0 {
+		errors := []string{}
+		for _, err := range result.Errors {
+			errors = append(errors, fmt.Sprintf("%s", err.Text))
+		}
+		return "", fmt.Errorf("transform js code error: %v", strings.Join(errors, "\n"))
+	}
+	return string(result.Code), nil
+}
+
 // MinifyJS minify the javascript code
-func MinifyJS(jsCode string) (string, error) {
+func MinifyJS(jsCode string, target ...api.Target) (string, error) {
+
+	t := api.ES2015
+	if len(target) > 0 {
+		t = target[0]
+	}
 	result := api.Transform(jsCode, api.TransformOptions{
 		Loader:            api.LoaderJS,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
+		Target:            t,
 	})
 
 	if len(result.Errors) > 0 {
