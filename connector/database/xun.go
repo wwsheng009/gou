@@ -192,7 +192,7 @@ func (x *Xun) getDSN(i int) (string, error) {
 	case "sqlite3":
 		return x.sqlite3DSN(i)
 	case "postgres":
-		return x.postGresqDSN(i)
+		return x.postgresDSN(i)
 	case "hdb":
 		return x.hdbDSN(i)
 	}
@@ -270,9 +270,7 @@ func (x *Xun) mysqlDSN(i int) (string, error) {
 
 	return dsn, nil
 }
-
-// postgres
-func (x *Xun) postGresqDSN(i int) (string, error) {
+func (x *Xun) postgresDSN(i int) (string, error) {
 
 	if x.Options.DB == "" {
 		return "", fmt.Errorf("options.db is required")
@@ -288,7 +286,7 @@ func (x *Xun) postGresqDSN(i int) (string, error) {
 	}
 
 	if host.Port == "" {
-		host.Port = "5096"
+		host.Port = "5432"
 	}
 
 	if host.User == "" {
@@ -298,17 +296,9 @@ func (x *Xun) postGresqDSN(i int) (string, error) {
 	if host.Pass == "" {
 		return "", fmt.Errorf("hosts.%d.pass is required", i)
 	}
-	params := []string{}
-	if x.Options.Params != nil {
-		for name, value := range x.Options.Params {
-			params = append(params, fmt.Sprintf("%s=%v", name, value))
-		}
-	}
 
-	dsn := fmt.Sprintf("postgres//%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
-	if len(params) > 0 {
-		dsn = dsn + "?" + strings.Join(params, "&")
-	}
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+
 	return dsn, nil
 }
 
@@ -349,10 +339,11 @@ func (x *Xun) hdbDSN(i int) (string, error) {
 	if len(params) > 0 {
 		dsn = dsn + "?" + strings.Join(params, "&")
 	}
+
+
 	return dsn, nil
 }
 
-// Setting get the connection setting
 func (x *Xun) Setting() map[string]interface{} {
 	return map[string]interface{}{
 		"db":        x.Options.DB,

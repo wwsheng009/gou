@@ -41,7 +41,8 @@ var RootScripts = map[string]*Script{}
 var importRe = regexp.MustCompile(`import\s+\t*\n*(\*\s+as\s+\w+|\{[^}]+\}|\w+)\s+from\s+["']([^"']+)["'];?`)
 var exportRe = regexp.MustCompile(`export\s+(default|function|class|const|var|let)\s+`)
 
-var internalKeepModules = []string{"/yao.ts", "/yao", "/gou", "/gou.ts"}
+var internalKeepModuleSuffixes = []string{"/yao.ts", "/yao", "/gou", "/gou.ts"}
+var internalKeepModules = []string{"@yao", "@yaoapps", "@yaoapp", "@gou"}
 
 // NewScript create a new script
 func NewScript(file string, id string, timeout ...time.Duration) *Script {
@@ -58,44 +59,57 @@ func NewScript(file string, id string, timeout ...time.Duration) *Script {
 	}
 }
 
+// Open open the script
+func (script *Script) Open(source []byte) error {
+	var err error = nil
+	if strings.HasSuffix(script.File, ".ts") {
+		source, err = TransformTS(script.File, source)
+		if err != nil {
+			return err
+		}
+	}
+	script.Source = string(source)
+	return nil
+}
+
+// MakeScript make a script from source
+func MakeScript(source []byte, file string, timeout time.Duration, isroot ...bool) (*Script, error) {
+	script := NewScript(file, file, timeout)
+	err := script.Open(source)
+	if err != nil {
+		return nil, err
+	}
+	script.Root = false
+	if len(isroot) > 0 {
+		script.Root = isroot[0]
+	}
+	return script, nil
+}
+
 // Load load the script
 func Load(file string, id string) (*Script, error) {
-	script := NewScript(file, id)
 	source, err := application.App.Read(file)
 	if err != nil {
 		return nil, err
 	}
-
-	if strings.HasSuffix(file, ".ts") {
-		source, err = TransformTS(file, source)
-		if err != nil {
-			return nil, err
-		}
+	script, err := MakeScript(source, file, 5*time.Second, false)
+	if err != nil {
+		return nil, err
 	}
-
-	script.Source = string(source)
-	script.Root = false
 	Scripts[id] = script
 	return script, nil
 }
 
 // LoadRoot load the script with root privileges
 func LoadRoot(file string, id string) (*Script, error) {
-	script := NewScript(file, id)
 	source, err := application.App.Read(file)
 	if err != nil {
 		return nil, err
 	}
-
-	if strings.HasSuffix(file, ".ts") {
-		source, err = TransformTS(file, source)
-		if err != nil {
-			return nil, err
-		}
+	script, err := MakeScript(source, file, 5*time.Second, true)
+	if err != nil {
+		return nil, err
 	}
-
-	script.Source = string(source)
-	script.Root = true
 	RootScripts[id] = script
 	return script, nil
 }
@@ -233,10 +247,9 @@ func loadModule(file string, tsCode string) error {
 		return nil
 	}
 
-	globalName := strings.ReplaceAll(strings.ReplaceAll(file, "/", "_"), ".", "_")
+	globalName := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(file, "/", "_"), ".", "_"), "-", "_")
 	// fix the windows path error
 	globalName = strings.ReplaceAll(globalName, "\\", "_")
-
 	entryPoints := []entry{}
 	loaded := map[string]bool{}
 	tsCode, entryPoints, err := getEntryPoints(file, tsCode, loaded)
@@ -342,12 +355,21 @@ func replaceImportCode(file string, source []byte) (string, []Import, error) {
 			importClause, importPath := matches[1], matches[2]
 
 			// Filter the internal keep modules
-			for _, keep := range internalKeepModules {
+			for _, keep := range internalKeepModuleSuffixes {
 				if strings.HasSuffix(importPath, keep) {
 					lines := strings.Split(m, "\n")
 					for i, line := range lines {
 						lines[i] = "// " + line
 
+					}
+					return strings.Join(lines, "\n")
+				}
+			}
+			for _, keep := range internalKeepModules {
+				if strings.HasPrefix(importPath, keep) {
+					lines := strings.Split(m, "\n")
+					for i, line := range lines {
+						lines[i] = "// " + line
 					}
 					return strings.Join(lines, "\n")
 				}
