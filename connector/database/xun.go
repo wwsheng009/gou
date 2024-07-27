@@ -297,8 +297,19 @@ func (x *Xun) postgresDSN(i int) (string, error) {
 		return "", fmt.Errorf("hosts.%d.pass is required", i)
 	}
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
-
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
+	params := []string{}
+	if x.Options.Params != nil {
+		for name, value := range x.Options.Params {
+			params = append(params, fmt.Sprintf("%s=%v", name, value))
+		}
+	}
+	if len(params) == 0 {
+		params = append(params, "sslmode=disable")
+	}
+	if len(params) > 0 {
+		dsn = dsn + "?" + strings.Join(params, "&")
+	}
 	return dsn, nil
 }
 
@@ -329,13 +340,14 @@ func (x *Xun) hdbDSN(i int) (string, error) {
 	if host.Pass == "" {
 		return "", fmt.Errorf("hosts.%d.pass is required", i)
 	}
+
+	dsn := fmt.Sprintf("hdb://%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
 	params := []string{}
 	if x.Options.Params != nil {
 		for name, value := range x.Options.Params {
 			params = append(params, fmt.Sprintf("%s=%v", name, value))
 		}
 	}
-	dsn := fmt.Sprintf("hdb://%s:%s@%s:%s/%s", host.User, host.Pass, host.Host, host.Port, x.Options.DB)
 	if len(params) > 0 {
 		dsn = dsn + "?" + strings.Join(params, "&")
 	}
