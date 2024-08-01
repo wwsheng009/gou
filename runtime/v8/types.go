@@ -27,6 +27,7 @@ type Option struct {
 	ContetxQueueSize  int       `json:"contextQueueSize,omitempty"`  // the default queue size for the context, the default value is 10, performance only
 	DataRoot          string    `json:"dataRoot,omitempty"`          // the data root path
 	TSConfig          *TSConfig `json:"tsconfig,omitempty"`          // the TypeScript config
+	Debug             bool      `json:"debug,omitempty"`             // if true, the debug mode will be enabled, default value is false
 
 	// The following options are experimental features and not stable.
 	// They may be removed once the features become stable. Please do not use them in a production environment.
@@ -49,11 +50,12 @@ type TSConfigCompilerOptions struct {
 
 // Script v8 scripts
 type Script struct {
-	ID      string
-	File    string
-	Source  string
-	Root    bool
-	Timeout time.Duration
+	ID          string
+	File        string
+	Source      string
+	Root        bool
+	SourceRoots interface{} // the script source root mappping
+	Timeout     time.Duration
 }
 
 // Module the module
@@ -86,11 +88,12 @@ type Isolates struct {
 
 // Context v8 Context
 type Context struct {
-	ID      string                 // the script id
-	Sid     string                 // set the session id
-	Data    map[string]interface{} // set the global data
-	Root    bool
-	Timeout time.Duration // terminate the execution after this time
+	ID          string                 // the script id
+	Sid         string                 // set the session id
+	Data        map[string]interface{} // set the global data
+	Root        bool
+	Timeout     time.Duration // terminate the execution after this time
+	SourceRoots interface{}   // the script source root mappping
 	*Runner
 	*store.Isolate
 	*v8go.UnboundScript
