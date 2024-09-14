@@ -52,7 +52,10 @@ func (tsconfg *TSConfig) GetFileName(path string) (string, bool, error) {
 // Match match the pattern
 func (tsconfg *TSConfig) Match(pattern, path string) bool {
 	prefix := strings.Split(pattern, "/*")[0] + string(os.PathSeparator)
-	return strings.HasPrefix(path, prefix)
+	prefix_windows := strings.Split(pattern, "/*")[0] + "\\"
+	prefix_linux := strings.Split(pattern, "/*")[0] + "/"
+
+	return strings.HasPrefix(path, prefix) || strings.HasPrefix(path, prefix_windows) || strings.HasPrefix(path, prefix_linux)
 }
 
 // ReplacePattern replace the pattern
