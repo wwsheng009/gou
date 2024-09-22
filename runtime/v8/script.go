@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -272,8 +273,8 @@ func loadModule(file string, tsCode string) error {
 
 	paths := strings.Split(file, string(os.PathSeparator))
 	dir := filepath.Join(root, paths[0]) // <app_root>/scripts, <app_root>/services, etc..
-	outdir := filepath.Join(string(os.PathSeparator), "outdir")
-
+	// outdir := filepath.Join(string(os.PathSeparator), "outdir")
+	outdir := filepath.Join(root, "outdir")
 	result := api.Build(api.BuildOptions{
 		EntryPoints: files,
 		Bundle:      true,
@@ -399,13 +400,15 @@ func replaceImportCode(file string, source []byte) (string, []Import, error) {
 			} else if strings.Index(importClause, " as ") >= 0 {
 				name = strings.ReplaceAll(importClause, " as ", ":")
 			}
-
 			imports = append(imports, Import{
 				Name:    name,
 				Path:    relImportPath,
 				AbsPath: absImportPath,
 				Clause:  importClause,
 			})
+			if runtime.GOOS == "windows" {
+				absImportPath = strings.ReplaceAll(absImportPath, "\\", "/")
+			}
 			return fmt.Sprintf(`import %s from "%s";`, importClause, absImportPath)
 		}
 		return m
