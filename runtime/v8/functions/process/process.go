@@ -35,8 +35,11 @@ func exec(info *v8go.FunctionCallbackInfo) *v8go.Value {
 			return bridge.JsException(info.Context(), err)
 		}
 	}
-
-	goRes, err := process.New(jsArgs[0].String(), goArgs...).
+	process, err := process.Of(jsArgs[0].String(), goArgs...)
+	if err != nil {
+		return bridge.JsException(info.Context(), err)
+	}
+	goRes, err := process.
 		WithGlobal(share.Global).
 		WithSID(share.Sid).
 		Exec()
