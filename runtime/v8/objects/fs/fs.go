@@ -92,6 +92,7 @@ func (obj *Object) ExportObject(iso *v8go.Isolate) *v8go.ObjectTemplate {
 
 	tmpl.Set("Move", obj.move(iso))
 	tmpl.Set("Copy", obj.copy(iso))
+	tmpl.Set("Merge", obj.merge(iso))
 	tmpl.Set("Abs", obj.abs(iso))
 
 	tmpl.Set("Zip", obj.zip(iso))
@@ -221,6 +222,46 @@ func (obj *Object) copy(iso *v8go.Isolate) *v8go.FunctionTemplate {
 			return obj.error(info, err)
 		}
 
+		return v8go.Null(iso)
+	})
+}
+
+func (obj *Object) merge(iso *v8go.Isolate) *v8go.FunctionTemplate {
+	return v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+		args := info.Args()
+		if len(args) < 2 {
+			return obj.errorString(info, "Missing parameters")
+		}
+
+		stor, err := obj.getFS(info)
+		if err != nil {
+			return obj.error(info, err)
+		}
+
+		if !args[0].IsArray() {
+			return obj.errorString(info, "Invalid Parameter type, require string array")
+		}
+		v, err := bridge.GoValue(args[0], info.Context())
+		if err != nil {
+			return obj.error(info, err)
+		}
+		if strSlice, ok := v.([]interface{}); ok {
+			var result []string
+			for _, v := range strSlice {
+				str, ok := v.(string)
+				if !ok {
+					return obj.error(info, fmt.Errorf("element %v is not a string", v))
+				}
+				result = append(result, str)
+			}
+
+			err = fs.Merge(stor, result, args[1].String())
+			if err != nil {
+				return obj.error(info, err)
+			}
+		} else {
+			return obj.errorString(info, "Invalid Parameter fileList, require array list")
+		}
 		return v8go.Null(iso)
 	})
 }

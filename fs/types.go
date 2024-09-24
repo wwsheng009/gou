@@ -44,4 +44,6 @@ type FileSystem interface {
 	Resize(inputPath, outputPath string, width, height uint) error
 
 	CleanCache()
+
+	Merge(fileList []string, dest string) error
 }

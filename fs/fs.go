@@ -218,6 +218,10 @@ func Copy(xfs FileSystem, name string, dst string) error {
 	return xfs.Copy(name, dst)
 }
 
+//merge files into new file
+func Merge(xfs FileSystem, fileList []string, dst string) error {
+	return xfs.Merge(fileList, dst)
+}
 // Exists returns a boolean indicating whether the error is known to report that a file or directory already exists.
 // It is satisfied by ErrExist as well as some syscall errors.
 func Exists(xfs FileSystem, name string) (bool, error) {

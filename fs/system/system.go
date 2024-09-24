@@ -869,3 +869,27 @@ func (f *File) copyRemove(oldpath string, newpath string) error {
 
 	return f.RemoveAll(oldpath)
 }
+
+func (f *File) Merge(fileList []string, dest string) error {
+	targetPath, err := f.absPath(dest)
+	if err != nil {
+		return err
+	}
+	complateFile, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer complateFile.Close()
+	for _, fileName := range fileList {
+		oldpath, err := f.absPath(fileName)
+		if err != nil {
+			return err
+		}
+		fileBuffer, err := os.ReadFile(oldpath)
+		if err != nil {
+			return err
+		}
+		complateFile.Write(fileBuffer)
+	}
+	return nil
+}
