@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	routepath "path"
@@ -30,7 +29,7 @@ func ProcessGuard(name string) gin.HandlerFunc {
 		var body interface{}
 		if c.Request.Body != nil {
 
-			bodyBytes, err := ioutil.ReadAll(c.Request.Body)
+			bodyBytes, err := io.ReadAll(c.Request.Body)
 			if err == nil {
 				if strings.HasPrefix(strings.ToLower(c.Request.Header.Get("Content-Type")), "application/json") {
 					jsoniter.Unmarshal(bodyBytes, &body)
@@ -40,7 +39,7 @@ func ProcessGuard(name string) gin.HandlerFunc {
 			}
 
 			// Reset body
-			c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
 		params := map[string]string{}
@@ -183,7 +182,7 @@ func (http HTTP) Route(router gin.IRoutes, path Path, allows ...string) {
 		handlers = append(handlers, path.redirectHandler(getArgs))
 
 	} else if path.ProcessHandler {
-		handlers = append(handlers, path.processHandler(getArgs))
+		handlers = append(handlers, path.processHandler())
 
 	} else if strings.HasPrefix(path.Out.Type, "text/event-stream") {
 		handlers = append(handlers, path.streamHandler(getArgs))
@@ -257,7 +256,7 @@ func (http HTTP) parseIn(in []interface{}) func(c *gin.Context) []interface{} {
 
 		if v == ":body" {
 			getValues = append(getValues, func(c *gin.Context) interface{} {
-				bytes, err := ioutil.ReadAll(c.Request.Body)
+				bytes, err := io.ReadAll(c.Request.Body)
 				if err != nil {
 					panic(err)
 				}
@@ -418,28 +417,25 @@ func (http HTTP) parseIn(in []interface{}) func(c *gin.Context) []interface{} {
 
 				file, err := c.FormFile(arg[1])
 				if err != nil {
-					exception.New("读取上传文件出错 %s", 500, err).Throw()
+					return types.UploadFile{Error: fmt.Sprintf("%s %s", arg[1], err.Error())}
 				}
+
 				ext := filepath.Ext(file.Filename)
-
+				dir, err := os.MkdirTemp(os.TempDir(), "upload")
 				if err != nil {
-					exception.New("读取上传文件出错 %s", 500, err).Throw()
+					return types.UploadFile{Error: fmt.Sprintf("%s %s", arg[1], err.Error())}
 				}
 
-				dir, err := ioutil.TempDir(os.TempDir(), "upload")
+				tmpfile, err := os.CreateTemp(dir, fmt.Sprintf("file-*%s", ext))
 				if err != nil {
-					exception.New("创建临时文件夹 %s", 500, err).Throw()
-				}
-
-				tmpfile, err := ioutil.TempFile(dir, fmt.Sprintf("file-*%s", ext))
-				if err != nil {
-					exception.New("创建临时文件出错 %s", 500, err).Throw()
+					return types.UploadFile{Error: fmt.Sprintf("%s %s", arg[1], err.Error())}
 				}
 
 				err = c.SaveUploadedFile(file, tmpfile.Name())
 				if err != nil {
-					exception.New("保存文件出错 %s", 500, err).Throw()
+					return types.UploadFile{Error: fmt.Sprintf("%s %s", arg[1], err.Error())}
 				}
+
 				return types.UploadFile{
 					Name:     file.Filename,
 					TempFile: tmpfile.Name(),
