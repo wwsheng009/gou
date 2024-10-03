@@ -34,7 +34,7 @@ func (tsconfg *TSConfig) GetFileName(path string) (string, bool, error) {
 						return filepath.SkipAll
 					}
 					return nil
-				}, "*.ts")
+				}, "*.ts", "*.js", "*.mjs")
 
 				if matched {
 					return f, true, nil
@@ -62,7 +62,7 @@ func (tsconfg *TSConfig) Match(pattern, path string) bool {
 func (tsconfg *TSConfig) ReplacePattern(path, pattern string) string {
 	prefix := strings.Split(pattern, "/*")[0]
 	file := strings.TrimPrefix(path, prefix)
-	if strings.HasSuffix(file, ".ts") {
+	if strings.HasSuffix(file, ".ts") || strings.HasSuffix(file, ".js") || strings.HasSuffix(file, ".mjs") {
 		return file
 	}
 	return file + ".ts"

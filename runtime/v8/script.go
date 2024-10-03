@@ -1,7 +1,9 @@
 package v8
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -45,7 +47,7 @@ var syncLock = sync.Mutex{}
 
 // GetModuleName get the module name
 func GetModuleName(file string) string {
-	replaces := []string{"@", "/", ".", "-", "[", "]", "(", ")", "{", "}", ":", ",", ";", " ", "\t", "\n", "\r","\\"}
+	replaces := []string{"@", "/", ".", "-", "[", "]", "(", ")", "{", "}", ":", ",", ";", " ", "\t", "\n", "\r", "\\"}
 	for _, replace := range replaces {
 		file = strings.ReplaceAll(file, replace, "_")
 	}
@@ -165,7 +167,8 @@ func TransformTS(file string, source []byte) ([]byte, error) {
 		importCodes := []string{}
 		if imports, has := ImportMap[file]; has {
 			for _, imp := range imports {
-				module, has := Modules[imp.AbsPath]
+				key := strings.TrimSuffix(imp.AbsPath, filepath.Ext(imp.AbsPath))
+				module, has := Modules[key]
 				if has {
 					importCodes = append(importCodes, fmt.Sprintf("%s;const %s = %s;", module.Source, imp.Name, module.GlobalName))
 				}
@@ -257,7 +260,7 @@ func loadModule(file string, tsCode string) error {
 	}
 
 	globalName := GetModuleName(file)
-	entryPoints := []entry{}
+	// entryPoints := []entry{}
 	loaded := map[string]bool{}
 	tsCode, entryPoints, err := getEntryPoints(file, tsCode, loaded)
 	if err != nil {
@@ -271,8 +274,9 @@ func loadModule(file string, tsCode string) error {
 		codes[entry.absfile] = entry.source
 	}
 
-	paths := strings.Split(file, string(os.PathSeparator))
-	dir := filepath.Join(root, paths[0]) // <app_root>/scripts, <app_root>/services, etc..
+	// paths := strings.Split(file, string(os.PathSeparator))
+	dir := root
+	// dir := filepath.Join(root, paths[0]) // <app_root>/scripts, <app_root>/services, etc..
 	// outdir := filepath.Join(string(os.PathSeparator), "outdir")
 	outdir := filepath.Join(root, "outdir")
 	result := api.Build(api.BuildOptions{
@@ -291,8 +295,17 @@ func loadModule(file string, tsCode string) error {
 			{
 				Name: "custom-import-plugin",
 				Setup: func(build api.PluginBuild) {
-					build.OnLoad(api.OnLoadOptions{Filter: `.*\.ts$`}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-						contents := codes[args.Path]
+					build.OnLoad(api.OnLoadOptions{Filter: `.*\.[tmj]s$`}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+						// contents := codes[args.Path]
+						contents, has := codes[args.Path]
+						if !has {
+							bytes, err := os.ReadFile(args.Path)
+							if err != nil {
+								return api.OnLoadResult{}, err
+							} else {
+								contents = string(bytes)
+							}
+						}
 						return api.OnLoadResult{
 							Contents: &contents,
 							Loader:   api.LoaderTS,
@@ -321,7 +334,7 @@ func loadModule(file string, tsCode string) error {
 				ModuleSourceMaps[key] = out.Contents
 
 			} else if strings.HasSuffix(out.Path, ".js") {
-				key := strings.TrimPrefix(strings.ReplaceAll(out.Path, ".js", ".ts"), outdir)
+				key := strings.TrimPrefix(strings.TrimSuffix(out.Path, filepath.Ext(out.Path)), outdir)
 				key = filepath.Join(dir, key)
 				Modules[key] = Module{
 					File:       file,
@@ -421,6 +434,7 @@ func replaceImportCode(file string, source []byte) (string, []Import, error) {
 	return tsCode, imports, err
 }
 
+// file current file include the import path, path the import file path
 func getImportPath(file string, path string) (string, error) {
 
 	var tsfile string
@@ -437,17 +451,61 @@ func getImportPath(file string, path string) (string, error) {
 	}
 
 	if !fromTsConfig {
-		relpath := filepath.Dir(file)
-		file = filepath.Join(relpath, path)
+		if strings.HasPrefix(path, ".") {
+			relpath := filepath.Dir(file)
+			file = filepath.Join(relpath, path)
+		} else {
+			path = filepath.Join("node_modules", path)
+			file = path
+		}
 	}
 
-	if !strings.HasSuffix(path, ".ts") {
-		if exist, _ := application.App.Exists(file + ".ts"); exist {
-			file = file + ".ts"
-			return file, nil
+	if !strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".js") && !strings.HasSuffix(path, ".mjs") {
 
-		} else if exist, _ := application.App.Exists(filepath.Join(path, "index.ts")); exist {
-			file = file + "index.ts"
+		suffixes := []string{".ts", ".js", ".mjs"}
+
+		// Check for file with extensions
+		if newFile, found := checkFileWithSuffixes(file, suffixes); found {
+			return newFile, nil
+		}
+
+		// Check for index files
+		if newIndex, found := checkIndexFiles(path, suffixes); found {
+			return newIndex, nil
+		}
+		if exist, _ := application.App.Exists(filepath.Join(path, "package.json")); exist {
+			packageInfo, err := GetPackageEntryFile(filepath.Join(path, "package.json"))
+			if err == nil {
+				if packageInfo.Module != "" {
+					file = filepath.Join(path, packageInfo.Module)
+					if !strings.HasSuffix(file, ".ts") && !strings.HasSuffix(file, ".js") && !strings.HasSuffix(file, ".mjs") {
+						if newFile, found := checkFileWithSuffixes(file, suffixes); found {
+							return newFile, nil
+						}
+						if newIndex, found := checkIndexFiles(file, suffixes); found {
+							return newIndex, nil
+						}
+					}
+					if exist, _ := application.App.Exists(file); exist {
+						return file, nil
+					}
+				}
+				if packageInfo.Main != "" {
+					file = filepath.Join(path, packageInfo.Main)
+					if !strings.HasSuffix(file, ".ts") && !strings.HasSuffix(file, ".js") && !strings.HasSuffix(file, ".mjs") {
+						if newFile, found := checkFileWithSuffixes(file, suffixes); found {
+							return newFile, nil
+						}
+						if newIndex, found := checkIndexFiles(file, suffixes); found {
+							return newIndex, nil
+						}
+					}
+					if exist, _ := application.App.Exists(file); exist {
+						return file, nil
+					}
+				}
+			}
+
 			return file, nil
 		}
 	}
@@ -457,6 +515,53 @@ func getImportPath(file string, path string) (string, error) {
 	}
 
 	return file, nil
+}
+func checkFileWithSuffixes(basePath string, suffixes []string) (string, bool) {
+	for _, suffix := range suffixes {
+		filePath := basePath + suffix
+		if exist, _ := application.App.Exists(filePath); exist {
+			return filePath, true
+		}
+	}
+	return "", false
+}
+
+func checkIndexFiles(path string, suffixes []string) (string, bool) {
+	for _, suffix := range suffixes {
+		indexPath := filepath.Join(path, "index"+suffix)
+		if exist, _ := application.App.Exists(indexPath); exist {
+			return indexPath, true
+		}
+	}
+	return "", false
+}
+
+type PackageJSON struct {
+	Main   string `json:"main"`
+	Module string `json:"module"`
+}
+
+// get the entry file for the package
+func GetPackageEntryFile(file string) (PackageJSON, error) {
+	// Parse the JSON
+	var pkg PackageJSON
+	f, err := os.Open(file)
+	if err != nil {
+		return pkg, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	// Read the file contents
+	bytes, err := io.ReadAll(f)
+	if err != nil {
+		return pkg, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	err = json.Unmarshal(bytes, &pkg)
+	if err != nil {
+		return pkg, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+	return pkg, nil
 }
 
 // Transform the javascript
