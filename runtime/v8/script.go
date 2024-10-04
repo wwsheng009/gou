@@ -1,9 +1,7 @@
 package v8
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -455,113 +453,27 @@ func getImportPath(file string, path string) (string, error) {
 			relpath := filepath.Dir(file)
 			file = filepath.Join(relpath, path)
 		} else {
-			path = filepath.Join("node_modules", path)
-			file = path
+			file = filepath.Join("node_modules", path)
 		}
 	}
 
-	if !strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".js") && !strings.HasSuffix(path, ".mjs") {
+	// if !strings.HasSuffix(path, ".ts") {
+	// 	if exist, _ := application.App.Exists(file + ".ts"); exist {
+	// 		file = file + ".ts"
+	// 		return file, nil
 
-		suffixes := []string{".ts", ".js", ".mjs"}
-
-		// Check for file with extensions
-		if newFile, found := checkFileWithSuffixes(file, suffixes); found {
-			return newFile, nil
-		}
-
-		// Check for index files
-		if newIndex, found := checkIndexFiles(path, suffixes); found {
-			return newIndex, nil
-		}
-		if exist, _ := application.App.Exists(filepath.Join(path, "package.json")); exist {
-			packageInfo, err := GetPackageEntryFile(filepath.Join(path, "package.json"))
-			if err == nil {
-				if packageInfo.Module != "" {
-					file = filepath.Join(path, packageInfo.Module)
-					if !strings.HasSuffix(file, ".ts") && !strings.HasSuffix(file, ".js") && !strings.HasSuffix(file, ".mjs") {
-						if newFile, found := checkFileWithSuffixes(file, suffixes); found {
-							return newFile, nil
-						}
-						if newIndex, found := checkIndexFiles(file, suffixes); found {
-							return newIndex, nil
-						}
-					}
-					if exist, _ := application.App.Exists(file); exist {
-						return file, nil
-					}
-				}
-				if packageInfo.Main != "" {
-					file = filepath.Join(path, packageInfo.Main)
-					if !strings.HasSuffix(file, ".ts") && !strings.HasSuffix(file, ".js") && !strings.HasSuffix(file, ".mjs") {
-						if newFile, found := checkFileWithSuffixes(file, suffixes); found {
-							return newFile, nil
-						}
-						if newIndex, found := checkIndexFiles(file, suffixes); found {
-							return newIndex, nil
-						}
-					}
-					if exist, _ := application.App.Exists(file); exist {
-						return file, nil
-					}
-				}
-			}
-
-			return file, nil
-		}
-	}
+	// 	} else if exist, _ := application.App.Exists(filepath.Join(path, "index.ts")); exist {
+	// 		file = file + "index.ts"
+	// 		return file, nil
+	// 	}
+	// }
+	file = checkImportFilePath(file)
 
 	if exist, _ := application.App.Exists(file); !exist {
 		return "", fmt.Errorf("file %s not exists", file)
 	}
 
 	return file, nil
-}
-func checkFileWithSuffixes(basePath string, suffixes []string) (string, bool) {
-	for _, suffix := range suffixes {
-		filePath := basePath + suffix
-		if exist, _ := application.App.Exists(filePath); exist {
-			return filePath, true
-		}
-	}
-	return "", false
-}
-
-func checkIndexFiles(path string, suffixes []string) (string, bool) {
-	for _, suffix := range suffixes {
-		indexPath := filepath.Join(path, "index"+suffix)
-		if exist, _ := application.App.Exists(indexPath); exist {
-			return indexPath, true
-		}
-	}
-	return "", false
-}
-
-type PackageJSON struct {
-	Main   string `json:"main"`
-	Module string `json:"module"`
-}
-
-// get the entry file for the package
-func GetPackageEntryFile(file string) (PackageJSON, error) {
-	// Parse the JSON
-	var pkg PackageJSON
-	f, err := os.Open(file)
-	if err != nil {
-		return pkg, fmt.Errorf("failed to open file: %w", err)
-	}
-	defer f.Close()
-
-	// Read the file contents
-	bytes, err := io.ReadAll(f)
-	if err != nil {
-		return pkg, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	err = json.Unmarshal(bytes, &pkg)
-	if err != nil {
-		return pkg, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-	return pkg, nil
 }
 
 // Transform the javascript
