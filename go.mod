@@ -1,6 +1,8 @@
 module github.com/yaoapp/gou
 
-go 1.20
+go 1.21.0
+
+toolchain go1.21.6
 
 require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -28,7 +30,7 @@ require (
 
 require (
 	github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
@@ -96,10 +98,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231212172506-995d672761c0 // indirect
 )
 
-require (
-	github.com/SAP/go-hdb v1.5.8 // indirect
-	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
-)
+require github.com/SAP/go-hdb v1.8.25 // indirect
 
 replace github.com/yaoapp/kun => ../kun
 
