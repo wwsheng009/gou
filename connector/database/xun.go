@@ -85,7 +85,9 @@ func (x *Xun) Query() (query.Query, error) {
 	if x.Manager.Connections == nil {
 		return nil, fmt.Errorf("connection is empty")
 	}
-
+	if len(x.Options.Hosts) == 0{
+		return nil, fmt.Errorf("database hosts is empty")
+	}
 	conn := &query.Connection{Option: x.Manager.Option}
 	for i, host := range x.Options.Hosts {
 		name := fmt.Sprintf("%s_%d", x.Name, i)
@@ -107,6 +109,10 @@ func (x *Xun) Query() (query.Query, error) {
 
 		conn.Read = &db.DB
 		conn.ReadConfig = db.Config
+	}
+	if conn.Read == nil {
+		conn.Read = conn.Write;
+		conn.ReadConfig = conn.WriteConfig;
 	}
 
 	return query.Use(conn), nil
@@ -130,6 +136,9 @@ func (x *Xun) Close() error {
 func (x *Xun) makeConnections() (err error) {
 
 	defer func() { err = exception.Catch(recover()) }()
+	if len(x.Options.Hosts) == 0 {
+		return fmt.Errorf("database hosts is empty")
+	}
 	manager := capsule.NewWithOption(dbal.Option{
 		Prefix:    x.Options.TablePrefix,
 		Charset:   x.Options.Collation,
