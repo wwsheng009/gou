@@ -46,6 +46,7 @@ var FileSystemHandlers = map[string]process.Handler{
 	"zip":             processZip,
 	"unzip":           processUnzip,
 	"glob":            processGlob,
+	"merge":           processMerge,
 }
 
 func init() {
@@ -414,4 +415,17 @@ func processDownload(process *process.Process) interface{} {
 		"content": data,
 		"type":    mimeType,
 	}
+}
+
+func processMerge(process *process.Process) interface{} {
+
+	process.ValidateArgNums(2)
+	stor := stor(process)
+	sourceFiles := process.ArgsStrings(0)
+	target := process.ArgsString(1)
+	err := stor.Merge(sourceFiles,target)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+	}
+	return nil;
 }
