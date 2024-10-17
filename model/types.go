@@ -149,6 +149,7 @@ type QueryParam struct {
 	Wheres   []QueryWhere    `json:"wheres,omitempty"`
 	Orders   []QueryOrder    `json:"orders,omitempty"`
 	Limit    int             `json:"limit,omitempty"`
+	Offset   int             `json:"offset,omitempty"`
 	Page     int             `json:"page,omitempty"`
 	PageSize int             `json:"pagesize,omitempty"`
 	Withs    map[string]With `json:"withs,omitempty"`

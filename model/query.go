@@ -88,6 +88,11 @@ func (param QueryParam) Query(stack *QueryStack, stackParams ...QueryStackParam)
 		stack.Query().Limit(param.Limit)
 	}
 
+	// Offset
+	if param.Offset > 0 {
+		stack.Query().Offset(param.Offset)
+	}
+
 	// Withs
 	for name, with := range param.Withs {
 		param.With(name, stack, with, mod)

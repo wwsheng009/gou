@@ -205,11 +205,17 @@ func (stack *QueryStack) run(res *[][]maps.MapStrAny, builder QueryStackBuilder,
 
 	defer log.
 		With(log.F{
-			"sql":      builder.Query.Limit(limit).ToSQL(),
-			"bindings": builder.Query.Limit(limit).GetBindings()}).
+			"sql":      builder.Query.Limit(limit).Offset(param.QueryParam.Offset).ToSQL(),
+			"bindings": builder.Query.Limit(limit).Offset(param.QueryParam.Offset).GetBindings()}).
 		Trace("QueryStack run()")
 
-	rows := builder.Query.Limit(limit).MustGet()
+	// rows := builder.Query.Limit(limit).MustGet()
+	if param.QueryParam.Offset > 0 {
+		builder.Query.Limit(limit).Offset(param.QueryParam.Offset)
+	} else {
+		builder.Query.Limit(limit)
+	}
+	rows := builder.Query.MustGet()
 	fmtRows := []maps.MapStr{}
 	for _, row := range rows {
 		fmtRow := maps.MapStr{}
@@ -258,7 +264,11 @@ func (stack *QueryStack) runHasMany(res *[][]maps.MapStrAny, builder QueryStackB
 	if param.QueryParam.Limit > 0 {
 		limit = param.QueryParam.Limit
 	}
-	builder.Query.WhereIn(name, foreignIDs).Limit(limit)
+	if param.QueryParam.Offset > 0 {
+		builder.Query.WhereIn(name, foreignIDs).Limit(limit).Offset(param.QueryParam.Offset)
+	} else {
+		builder.Query.WhereIn(name, foreignIDs).Limit(limit)
+	}
 	rows := builder.Query.MustGet()
 
 	// 格式化数据
