@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -663,7 +664,11 @@ func (f *File) Move(oldpath string, newpath string) error {
 		return err
 	}
 
+	if runtime.GOOS == "windows" {
+		return f.copyRemove(f.relPath(oldpath), f.relPath(newpath))
+	}
 	err = os.Rename(oldpath, newpath)
+	
 	if err != nil && strings.Contains(err.Error(), "invalid cross-device link") {
 		return f.copyRemove(f.relPath(oldpath), f.relPath(newpath))
 	}
