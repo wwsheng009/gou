@@ -56,14 +56,24 @@ func (path Path) defaultHandler(getArgs argsHandler) func(c *gin.Context) {
 				}
 			}
 
+			// Release Memory
+			defer func() { resp = nil; body = nil }()
 			switch data := body.(type) {
 			case maps.Map, map[string]interface{}, []interface{}, []maps.Map, []map[string]interface{}:
+				defer func() { data = nil }()
 				c.JSON(status, data)
 				c.Done()
 				return
 
 			case []byte:
+				defer func() { data = nil }()
 				c.Data(status, contentType, data)
+				c.Done()
+				return
+
+			case io.ReadCloser:
+				defer data.Close()
+				c.DataFromReader(status, -1, contentType, data, nil)
 				c.Done()
 				return
 
@@ -288,13 +298,13 @@ func (path Path) execProcess(ctx context.Context, chRes chan<- interface{}, c *g
 	}
 
 	process.WithContext(ctx)
-	res, err := process.Exec()
+	err = process.Execute()
 	if err != nil {
 		log.Error("[Path] %s %s", path.Path, err.Error())
 		chRes <- err
 		return
 	}
-	chRes <- res
+	chRes <- process.Value()
 }
 
 func (path Path) runProcess(ctx context.Context, c *gin.Context, getArgs argsHandler) interface{} {
@@ -315,7 +325,12 @@ func (path Path) runProcess(ctx context.Context, c *gin.Context, getArgs argsHan
 	}
 
 	process.WithContext(ctx)
-	return process.Run()
+	err := process.Execute()
+	if err != nil {
+		log.Error("[Path] %s %s", path.Path, err.Error())
+		exception.Err(err, 500).Throw()
+	}
+	return process.Value()
 }
 
 func (path Path) reqContentType(c *gin.Context) string {
@@ -329,17 +344,16 @@ func (path Path) reqContentType(c *gin.Context) string {
 func (path Path) setResponseHeaders(c *gin.Context, resp interface{}, contentType string) string {
 	if len(path.Out.Headers) > 0 {
 		res := any.Of(resp)
-		if res.IsMap() { // 处理变量
+
+		// Parse Headers
+		if res.IsMap() {
 			data := res.Map().MapStrAny.Dot()
 			for name, value := range path.Out.Headers {
 				v := helper.Bind(value, data)
 				if v != nil {
+					path.Out.Headers[name] = fmt.Sprintf("%v", v)
 					c.Writer.Header().Set(name, fmt.Sprintf("%v", v))
-					if name == "Content-Type" {
-						contentType = fmt.Sprintf("%v", v)
-					}
 				}
-
 			}
 		} else {
 			for name, value := range path.Out.Headers {
@@ -349,7 +363,16 @@ func (path Path) setResponseHeaders(c *gin.Context, resp interface{}, contentTyp
 				}
 			}
 		}
+
+		// Set Headers and replace Content-Type if exists
+		for name, value := range path.Out.Headers {
+			c.Writer.Header().Set(name, value)
+			if name == "Content-Type" {
+				contentType = value
+			}
+		}
 	}
+
 	return contentType
 }
 
