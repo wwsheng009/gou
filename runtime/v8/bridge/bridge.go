@@ -271,9 +271,9 @@ func jsValueParse(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 // *  | ✅ | object(Uint8Array)        | []byte                  |
 // *  | ✅ | object                    | map[string]interface{}  |
 // *  | ✅ | array                     | []interface{}           |
-// *  | ✅ | object(Promise)           | bridge.PromiseT          |
-// *  | ✅ | function                  | bridge.FunctionT         |
-// *  |-------------------------------------------------------
+// *  | ✅ | object(Promise)           | bridge.PromiseT         |
+// *  | ✅ | function                  | bridge.FunctionT        |
+// *  |-----------------------------------------------------------
 func GoValue(value *v8go.Value, ctx *v8go.Context) (interface{}, error) {
 
 	if value.IsNull() {
@@ -352,6 +352,15 @@ func GoValue(value *v8go.Value, ctx *v8go.Context) (interface{}, error) {
 	if value.IsMap() {
 		var goValue map[string]interface{}
 		return goValueParse(value, goValue)
+	}
+
+	// YAO External
+	if value.IsYaoExternal() {
+		goValue, err := value.External()
+		if err != nil {
+			return nil, err
+		}
+		return goValue, nil
 	}
 
 	// Map, Array etc.
