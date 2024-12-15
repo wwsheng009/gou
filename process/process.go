@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/fatih/color"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/kun/exception"
 )
 
@@ -13,6 +16,15 @@ var Handlers = map[string]Handler{}
 
 // New make a new process
 func New(name string, args ...interface{}) *Process {
+	process, err := Of(name, args...)
+	if err != nil {
+		exception.New("%s", 500, err.Error()).Throw()
+	}
+	return process
+}
+
+// NewWithContext make a new process with context
+func NewWithContext(ctx context.Context, name string, args ...interface{}) *Process {
 	process, err := Of(name, args...)
 	if err != nil {
 		exception.New("%s", 500, err.Error()).Throw()
@@ -32,16 +44,38 @@ func Of(name string, args ...interface{}) (*Process, error) {
 
 // Execute execute the process and return error only
 func (process *Process) Execute() (err error) {
+	if process.Context == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		process.Context = ctx
+	}
+
 	var hd Handler
 	hd, err = process.handler()
 	if err != nil {
 		return err
 	}
 
-	defer func() { err = exception.Catch(recover()) }()
-	value := hd(process)
-	process._val = &value
-	return err
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() {
+			recovered := recover()
+			err = exception.Catch(recovered)
+			if err != nil {
+				exception.DebugPrint(err, "%s", process)
+			}
+		}()
+		value := hd(process)
+		process._val = &value
+	}()
+
+	select {
+	case <-process.Context.Done():
+		return process.Context.Err()
+	case <-done:
+		return err
+	}
 }
 
 // Release the value of the process
@@ -51,6 +85,9 @@ func (process *Process) Release() {
 
 // Dispose the process after run success
 func (process *Process) Dispose() {
+	if process == nil {
+		return
+	}
 	if process.Runtime != nil {
 		process.Runtime.Dispose()
 	}
@@ -60,7 +97,6 @@ func (process *Process) Dispose() {
 	process.Context = nil
 	process.Runtime = nil
 	process._val = nil
-	process = nil
 }
 
 // Value get the result of the process
@@ -85,6 +121,7 @@ func (process *Process) Run() interface{} {
 		return nil
 	}
 
+	defer func() { process.Release() }()
 	return hd(process)
 }
 
@@ -106,7 +143,6 @@ func (process *Process) Run() interface{} {
 //
 // ****
 func (process *Process) Exec() (value interface{}, err error) {
-
 	var hd Handler
 	hd, err = process.handler()
 	if err != nil {
@@ -165,6 +201,22 @@ func (process *Process) WithContext(ctx context.Context) *Process {
 func (process *Process) WithRuntime(runtime Runtime) *Process {
 	process.Runtime = runtime
 	return process
+}
+
+// String the process as string
+func (process Process) String() string {
+	args, _ := jsoniter.MarshalToString(process.Args)
+	global, _ := jsoniter.MarshalToString(process.Global)
+	return fmt.Sprintf("%s%s\n%s%s\n%s%s\n%s%s\n",
+		color.YellowString("Process: "),
+		color.WhiteString(process.Name),
+		color.YellowString("Sid: "),
+		color.WhiteString(process.Sid),
+		color.YellowString("Args: \n"),
+		color.WhiteString(args),
+		color.YellowString("Global: \n"),
+		color.WhiteString(global),
+	)
 }
 
 // handler get the process handler
