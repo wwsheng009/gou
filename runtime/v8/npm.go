@@ -18,7 +18,7 @@ type PackageInfo struct {
 
 func checkImportFilePath(file string) string {
 	//maybe folder such like 'xx.js/index.js'
-	suffixes := []string{".ts", ".js", ".mjs"}
+	suffixes := []string{".d.ts", ".ts", ".js", ".mjs"}
 	if isDirectory(file) || !hasValidSuffix(file, suffixes) {
 		if checkFileExist(filepath.Join(file, "package.json")) {
 			if packageInfo, err := getPackageEntryFile(filepath.Join(file, "package.json")); err == nil {
