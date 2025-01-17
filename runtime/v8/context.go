@@ -17,6 +17,9 @@ func (context *Context) Call(method string, args ...interface{}) (interface{}, e
 	if context.Runner != nil {
 		return context.Runner.Exec(context.script), nil
 	}
+	if context.IsClosed() {
+		return nil,fmt.Errorf("%s.%s %+v", context.ID, method, "context is closed")
+	}
 
 	// Set the global data
 	global := context.Global()
@@ -149,14 +152,15 @@ func (context *Context) WithFunction(name string, cb v8go.FunctionCallback) {
 
 // Close Context
 func (context *Context) Close() error {
-
+	if context.Context == nil {
+		return nil
+	}
 	// Standard Mode Release Isolate
 	if runtimeOption.Mode == "standard" {
 		context.Context.Close()
 		context.Context = nil
 		context.UnboundScript = nil
 		context.Data = nil
-
 		context.Isolate.Dispose()
 		context.Isolate = nil
 		return nil
