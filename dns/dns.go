@@ -6,7 +6,9 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/yaoapp/kun/log"
@@ -14,6 +16,8 @@ import (
 
 // DNS cache
 var caches = map[string][]string{}
+
+var fastHostIpCache = map[string]string{}
 
 // LookupIP looks up host using the local resolver. It returns a slice of that host's IPv4 and IPv6 addresses.
 func LookupIP(host string, ipv6 ...bool) ([]string, error) {
@@ -85,6 +89,16 @@ func DialContext() func(ctx context.Context, network, addr string) (net.Conn, er
 	if v := os.Getenv("YAO_ENABLE_IPV6"); v != "" {
 		ipv6 = true
 	}
+	connectTimeout := 0
+	if v := os.Getenv("YAO_NET_DIAL_TIMEOUT"); v!= "" {
+		// Parse int
+		timeout, err := strconv.Atoi(v)
+		if err != nil {
+			log.Error("Failed to parse YAO_NET_DIAL_TIMEOUT: %v, it should be numbers of the seconds", err)
+		} else {
+			connectTimeout = timeout
+		}
+	}
 
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
@@ -92,18 +106,40 @@ func DialContext() func(ctx context.Context, network, addr string) (net.Conn, er
 			return nil, err
 		}
 
+		if ip, has := fastHostIpCache[host]; has {
+			var dialer net.Dialer
+			if connectTimeout > 0  {
+				dialer.Timeout = time.Duration(connectTimeout) * time.Second // 设置连接超时时间
+			}
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
+			if err == nil  {
+				return conn,nil
+			}
+		}
+
 		ips, err := LookupIP(host, ipv6)
 		if err != nil {
 			return nil, err
 		}
-
+		
+		lastErr := error(nil)
 		for _, ip := range ips {
 			var dialer net.Dialer
-			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
-			if err != nil {
-				return nil, err
+			if connectTimeout > 0  {
+				dialer.Timeout = time.Duration(connectTimeout) * time.Second // 设置连接超时时间
 			}
-			return conn, nil
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
+			if err == nil {
+				fastHostIpCache[host] = ip
+				lastErr = nil
+				return conn, nil
+			} else {
+				lastErr = err
+			}
+		}
+		if lastErr != nil {
+			delete(fastHostIpCache, host)
+			return nil, lastErr
 		}
 
 		log.Error("DNS resolve fail: %v %s", ips, addr)
