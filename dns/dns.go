@@ -90,7 +90,7 @@ func DialContext() func(ctx context.Context, network, addr string) (net.Conn, er
 		ipv6 = true
 	}
 	connectTimeout := 0
-	if v := os.Getenv("YAO_NET_DIAL_TIMEOUT"); v!= "" {
+	if v := os.Getenv("YAO_NET_DIAL_TIMEOUT"); v != "" {
 		// Parse int
 		timeout, err := strconv.Atoi(v)
 		if err != nil {
@@ -108,12 +108,12 @@ func DialContext() func(ctx context.Context, network, addr string) (net.Conn, er
 
 		if ip, has := fastHostIpCache[host]; has {
 			var dialer net.Dialer
-			if connectTimeout > 0  {
+			if connectTimeout > 0 {
 				dialer.Timeout = time.Duration(connectTimeout) * time.Second // 设置连接超时时间
 			}
 			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
-			if err == nil  {
-				return conn,nil
+			if err == nil {
+				return conn, nil
 			}
 		}
 
@@ -121,22 +121,45 @@ func DialContext() func(ctx context.Context, network, addr string) (net.Conn, er
 		if err != nil {
 			return nil, err
 		}
-		
+
 		lastErr := error(nil)
+		// 使用一个通道来接收连接结果
+		results := make(chan struct {
+			conn net.Conn
+			ip   string
+			err  error
+		})
+
+		// 并行地尝试连接每个 IP
 		for _, ip := range ips {
-			var dialer net.Dialer
-			if connectTimeout > 0  {
-				dialer.Timeout = time.Duration(connectTimeout) * time.Second // 设置连接超时时间
-			}
-			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
-			if err == nil {
-				fastHostIpCache[host] = ip
-				lastErr = nil
-				return conn, nil
-			} else {
-				lastErr = err
-			}
+			go func(ip string) {
+				var dialer net.Dialer
+				if connectTimeout > 0 {
+					dialer.Timeout = time.Duration(connectTimeout) * time.Second // 设置连接超时时间
+				}
+				conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
+				results <- struct {
+					conn net.Conn
+					ip   string
+					err  error
+				}{conn, ip, err}
+			}(ip)
 		}
+
+		// 等待第一个成功的连接
+		select {
+		case result := <-results:
+			if result.err == nil {
+				fastHostIpCache[host] = result.ip
+				return result.conn, nil
+			} else {
+				lastErr = result.err
+			}
+		case <-ctx.Done():
+			// 上下文超时或取消
+			lastErr = ctx.Err()
+		}
+
 		if lastErr != nil {
 			delete(fastHostIpCache, host)
 			return nil, lastErr
