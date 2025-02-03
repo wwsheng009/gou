@@ -22,6 +22,9 @@ func New() *Object {
 func (obj *Object) ExportObject(iso *v8go.Isolate) *v8go.ObjectTemplate {
 	tmpl := v8go.NewObjectTemplate(iso)
 	tmpl.Set("log", obj.run(iso))
+	tmpl.Set("print", obj.print(iso))
+	tmpl.Set("println", obj.run(iso))
+
 	return tmpl
 }
 
@@ -29,6 +32,8 @@ func (obj *Object) ExportObject(iso *v8go.Isolate) *v8go.ObjectTemplate {
 func (obj *Object) Set(name string, ctx *v8go.Context) error {
 	tmpl := v8go.NewObjectTemplate(ctx.Isolate())
 	tmpl.Set("log", obj.run(ctx.Isolate()))
+	tmpl.Set("print", obj.print(ctx.Isolate()))
+	tmpl.Set("println", obj.run(ctx.Isolate()))
 
 	instance, err := tmpl.NewInstance(ctx)
 	if err != nil {
@@ -64,6 +69,34 @@ func (obj *Object) run(iso *v8go.Isolate) *v8go.FunctionTemplate {
 			}
 
 			helper.Dump(goArgs...)
+		}
+
+		return v8go.Null(iso)
+	})
+}
+
+func (obj *Object) print(iso *v8go.Isolate) *v8go.FunctionTemplate {
+
+	return v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+
+		args := info.Args()
+		if len(args) < 1 {
+			msg := fmt.Sprintf("console.print: %s", "Missing parameters")
+			log.Error(msg)
+			return bridge.JsException(info.Context(), msg)
+		}
+
+		goArgs := []interface{}{}
+		var err error
+		if len(args) > 0 {
+			goArgs, err = bridge.GoValues(args, info.Context())
+			if err != nil {
+				msg := fmt.Sprintf("console.print: %+v", err)
+				log.Error(msg)
+				return bridge.JsException(info.Context(), msg)
+			}
+
+			helper.PrintString(goArgs...)
 		}
 
 		return v8go.Null(iso)
