@@ -192,8 +192,9 @@ func setColumnType(table schema.Blueprint, column types.Column) (*schema.Column,
 	case "year":
 		return table.Year(column.Name), nil
 
-	case "vector":
-		return table.Vector(column.Name, column.Length), nil
+	case "vector","halfvec","vecf16":
+		return table.Vector(column.Name, column.Type, column.Length), nil
+	
 	}
 
 	return nil, fmt.Errorf("Column %s, Type %s does support", column.Name, column.Type)
