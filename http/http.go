@@ -387,6 +387,9 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 	defer resp.Body.Close()
 
 	scanner := bufio.NewScanner(resp.Body)
+	const maxCapacity = 10 * 1024 * 1024 
+	buf := make([]byte, 0, maxCapacity) 
+	scanner.Buffer(buf, maxCapacity)
 	for scanner.Scan() {
 		res := handler(scanner.Bytes())
 		switch res {
