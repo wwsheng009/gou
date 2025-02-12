@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/andybalholm/brotli"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/cast"
 	"github.com/yaoapp/gou/dns"
@@ -250,10 +251,18 @@ func (r *Request) Send(method string, data interface{}) *Response {
 	if method == "HEAD" {
 		return res
 	}
-
-	rBody, err := io.ReadAll(resp.Body) // response body is []byte
-	if err != nil {
-		return ResponseError(resp.StatusCode, err.Error())
+	var rBody []byte
+	if resp.Header.Get("Content-Encoding") == "br" {
+		brReader := brotli.NewReader(resp.Body)
+		rBody, err = io.ReadAll(brReader)
+		if err != nil {
+			return ResponseError(resp.StatusCode, err.Error())
+		}
+	} else {
+		rBody, err = io.ReadAll(resp.Body) // response body is []byte
+		if err != nil {
+			return ResponseError(resp.StatusCode, err.Error())
+		}
 	}
 
 	res.Data = rBody
@@ -387,8 +396,8 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 	defer resp.Body.Close()
 
 	scanner := bufio.NewScanner(resp.Body)
-	const maxCapacity = 10 * 1024 * 1024 
-	buf := make([]byte, 0, maxCapacity) 
+	const maxCapacity = 10 * 1024 * 1024
+	buf := make([]byte, 0, maxCapacity)
 	scanner.Buffer(buf, maxCapacity)
 	for scanner.Scan() {
 		res := handler(scanner.Bytes())
