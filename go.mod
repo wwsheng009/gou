@@ -17,7 +17,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/miekg/dns v1.1.48
 	github.com/robfig/cron/v3 v3.0.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/tidwall/buntdb v1.3.0
 	github.com/yaoapp/kun v0.9.0
 	github.com/yaoapp/xun v0.0.0-00010101000000-000000000000
@@ -81,6 +81,8 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/qdrant/go-client v1.12.0
+	github.com/sergi/go-diff v1.3.1
+	github.com/watchfultele/jsonrepair v0.0.0-20250207052432-e4397ed42611
 	golang.org/x/image v0.18.0
 )
 
