@@ -14,6 +14,7 @@ import (
 	"github.com/yaoapp/gou/query/share"
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
+	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/kun/maps"
 	"github.com/yaoapp/kun/utils"
 	"github.com/yaoapp/xun"
@@ -172,6 +173,7 @@ func (gou Query) Run(data maps.Map) interface{} {
 		fmt.Println(sql)
 		utils.Dump(bindings)
 	}
+	defer log.Trace("Gou Query Run sql:%s", sql)
 
 	res, err := qb.UseWrite().DB().Exec(sql, bindings...)
 	if err != nil {
@@ -264,6 +266,7 @@ func (gou Query) Get(data maps.Map) []share.Record {
 		fmt.Println(sql)
 		utils.Dump(bindings)
 	}
+	defer log.Trace("Gou Query Get sql:%s", sql)
 
 	rows := qb.MustGet()
 
@@ -320,6 +323,7 @@ func (gou Query) Paginate(data maps.Map) share.Paginate {
 		fmt.Println(sql)
 		utils.Dump(bindings)
 	}
+	defer log.Trace("Gou Query Paginate sql:%s", sql)
 
 	rows := qb.MustGet()
 
@@ -343,6 +347,7 @@ func (gou Query) total(sql string, bindings []interface{}) int {
 			fmt.Println(sql)
 			utils.Dump(bindings)
 		}
+		defer log.Trace("Gou Query total sql:%s", sql)
 		row := qb.MustFirst()
 		total = row.GetInt("total")
 	}
