@@ -195,21 +195,6 @@ func (r *Request) Send(method string, data interface{}) *Response {
 	var tr = &http.Transport{DialContext: dialContext}
 	var client *http.Client = &http.Client{Transport: tr}
 
-	// check if the proxy is set
-	proxy := getProxy(false)
-	if proxy != "" {
-		proxyURL, err := url.Parse(proxy)
-		if err != nil {
-			return ResponseError(0, err.Error())
-		}
-		tr := &http.Transport{
-			Proxy:       http.ProxyURL(proxyURL),
-			DialContext: dialContext,
-		}
-
-		client = &http.Client{Transport: tr}
-	}
-
 	// Https SkipVerify false
 	if strings.HasPrefix(r.url, "https://") {
 
@@ -229,6 +214,21 @@ func (r *Request) Send(method string, data interface{}) *Response {
 		}
 
 		client = &http.Client{Transport: tr}
+	} else {
+		// check if the proxy is set
+		proxy := getProxy(false)
+		if proxy != "" {
+			proxyURL, err := url.Parse(proxy)
+			if err != nil {
+				return ResponseError(0, err.Error())
+			}
+			tr := &http.Transport{
+				Proxy:       http.ProxyURL(proxyURL),
+				DialContext: dialContext,
+			}
+
+			client = &http.Client{Transport: tr}
+		}
 	}
 	defer tr.CloseIdleConnections()
 
@@ -286,11 +286,17 @@ func (r *Request) Send(method string, data interface{}) *Response {
 		switch value := rData.(type) {
 
 		case map[string]string:
-			res.Message = value["message"]
+			if v, ok := value["message"]; ok {
+				res.Message = v
+			} else if v, ok := value["msg"]; ok {
+				res.Message = v
+			}
 			break
 
 		case map[string]interface{}:
 			if v, ok := value["message"].(string); ok {
+				res.Message = v
+			} else if v, ok := value["msg"].(string); ok {
 				res.Message = v
 			}
 			break
@@ -311,7 +317,7 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 	}
 
 	if method != "GET" && method != "HEAD" {
-		if r.headers.Get("Content-Type") == "" {
+		if r.headers.Get("Content-Type") == "" && r.headers.Get("content-type") == "" {
 			r.headers.Set("Content-Type", "text/plain")
 		}
 
@@ -319,6 +325,9 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 		if res != nil {
 			return nil
 		}
+	}
+	if handler != nil && !r.HasHeader("Accept") && !r.HasHeader("accept") {
+		r.AddHeader("Accept", "text/event-stream; charset=utf-8")
 	}
 
 	requestURL := r.url
@@ -352,21 +361,6 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 	var tr = &http.Transport{DialContext: dialContext}
 	var client *http.Client = &http.Client{Transport: tr}
 
-	// check if the proxy is set
-	proxy := getProxy(false)
-	if proxy != "" {
-		proxyURL, err := url.Parse(proxy)
-		if err != nil {
-			return err
-		}
-		tr := &http.Transport{
-			Proxy:       http.ProxyURL(proxyURL),
-			DialContext: dialContext,
-		}
-
-		client = &http.Client{Transport: tr}
-	}
-
 	// Https SkipVerify false
 	if strings.HasPrefix(r.url, "https://") {
 
@@ -386,6 +380,21 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 		}
 
 		client = &http.Client{Transport: tr}
+	} else {
+		// check if the proxy is set
+		proxy := getProxy(false)
+		if proxy != "" {
+			proxyURL, err := url.Parse(proxy)
+			if err != nil {
+				return err
+			}
+			tr := &http.Transport{
+				Proxy:       http.ProxyURL(proxyURL),
+				DialContext: dialContext,
+			}
+
+			client = &http.Client{Transport: tr}
+		}
 	}
 	defer tr.CloseIdleConnections()
 
