@@ -8,6 +8,7 @@ import (
 	"os"
 	routepath "path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -132,6 +133,25 @@ func IsAllowed(c *gin.Context, allowsMap map[string]bool) bool {
 		if host == c.Request.Host {
 			return true
 		}
+
+		// 增加模糊匹配和正则匹配
+		for allowHost := range allowsMap {
+			// 模糊匹配，支持通配符 *
+			if strings.Contains(allowHost, "*") {
+				pattern := strings.ReplaceAll(allowHost, "*", ".*")
+				matched, _ := regexp.MatchString("^"+pattern+"$", host)
+				if matched {
+					return true
+				}
+			}
+
+			// 正则匹配
+			matched, _ := regexp.MatchString("^"+allowHost+"$", host)
+			if matched {
+				return true
+			}
+		}
+
 		if _, has := allowsMap[host]; !has {
 			return false
 		}
