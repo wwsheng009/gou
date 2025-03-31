@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
@@ -13,31 +14,41 @@ import (
 
 // ModelHandlers 模型运行器
 var ModelHandlers = map[string]process.Handler{
-	"find":                    processFind,
-	"get":                     processGet,
-	"paginate":                processPaginate,
-	"selectoption":            processSelectOption,
-	"create":                  processCreate,
-	"update":                  processUpdate,
-	"save":                    processSave,
-	"delete":                  processDelete,
-	"destroy":                 processDestroy,
-	"insert":                  processInsert,
-	"updatewhere":             processUpdateWhere,
-	"deletewhere":             processDeleteWhere,
-	"destroywhere":            processDestroyWhere,
-	"eachsave":                processEachSave,
-	"eachsaveafterdelete":     processEachSaveAfterDelete,
-	"migrate":                 processMigrate,
-	"load":                    processLoad,
-	"reload":                  processReload,
-	"read":                    processRead,
-	"exists":                  processExists,
+
+	// Atomic operations
+	"find":                processFind,
+	"get":                 processGet,
+	"paginate":            processPaginate,
+	"create":              processCreate,
+	"update":              processUpdate,
+	"save":                processSave,
+	"delete":              processDelete,
+	"destroy":             processDestroy,
+	"insert":              processInsert,
+	"updatewhere":         processUpdateWhere,
+	"deletewhere":         processDeleteWhere,
+	"destroywhere":        processDestroyWhere,
+	"eachsave":            processEachSave,
+	"eachsaveafterdelete": processEachSaveAfterDelete,
+	"upsert":              processUpsert,
+
+	// Select operations - will be deprecated
+	"selectoption": processSelectOption,
+
+	// Snapshot operations
 	"takesnapshot":            processTakeSnapshot,
 	"restoresnapshot":         processRestoreSnapshot,
 	"restoresnapshotbyrename": processRestoreSnapshotByRename,
 	"dropsnapshot":            processDropSnapshot,
 	"snapshotexists":          processSnapshotExists,
+
+	// DSL operations
+	"migrate":  processMigrate,
+	"load":     processLoad,
+	"reload":   processReload,
+	"metadata": processGetMetaData,
+	"read":     processRead,
+	"exists":   processExists,
 }
 
 func init() {
@@ -45,10 +56,11 @@ func init() {
 	// Model instance
 	process.RegisterGroup("models", ModelHandlers)
 
-	// Model management
+	// Model DSL operations
 	process.RegisterGroup("model", map[string]process.Handler{
 		"list":    processList,
-		"get":     processGetModel,
+		"read":    processRead,
+		"dsl":     processDSL,
 		"exists":  processModelExists,
 		"reload":  processModelReload,
 		"migrate": processModelMigrate,
@@ -103,8 +115,8 @@ func processModelExists(process *process.Process) interface{} {
 	return Exists(id)
 }
 
-// processGetModel get the model
-func processGetModel(process *process.Process) interface{} {
+// processDSL get the model dsl
+func processDSL(process *process.Process) interface{} {
 	process.ValidateArgNums(1)
 	id := process.ArgsString(0)
 	options := process.ArgsMap(1)
@@ -358,6 +370,10 @@ func processEachSaveAfterDelete(process *process.Process) interface{} {
 
 // processSelectOption 运行模型 MustGet
 func processSelectOption(process *process.Process) interface{} {
+
+	// TODO: will be deprecated
+	color.Yellow("SelectOption will be deprecated, use Get instead")
+
 	mod := Select(process.ID)
 	keyword := "%%"
 	if process.NumOfArgs() > 0 {
@@ -431,9 +447,15 @@ func processReload(process *process.Process) interface{} {
 	return nil
 }
 
-// processRead read the model dsl
+// processGetMetaData get the model meta data
+func processGetMetaData(process *process.Process) interface{} {
+	return GetMetaData(process.ID)
+}
+
+// processRead read the model source
 func processRead(process *process.Process) interface{} {
-	return Read(process.ID)
+	mod := Select(process.ID)
+	return string(mod.source)
 }
 
 // processExists Check if the model is loaded
@@ -499,4 +521,51 @@ func processSnapshotExists(process *process.Process) interface{} {
 		exception.Err(err, 500).Throw()
 	}
 	return exists
+}
+
+// processUpsert runs the model Upsert method
+func processUpsert(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+	mod := Select(process.ID)
+	row := any.Of(process.Args[0]).Map().MapStrAny
+
+	// Validate uniqueBy parameter
+	var uniqueBy []interface{}
+	switch v := process.Args[1].(type) {
+	case string:
+		uniqueBy = []interface{}{v}
+	case []string:
+		for _, s := range v {
+			uniqueBy = append(uniqueBy, s)
+		}
+	case []interface{}:
+		uniqueBy = v
+	default:
+		exception.New("uniqueBy parameter must be a string or string array", 400).Throw()
+	}
+
+	if len(uniqueBy) == 0 {
+		exception.New("uniqueBy parameter cannot be empty", 400).Throw()
+	}
+
+	// Process updateColumns parameter if provided
+	var updateColumns []interface{}
+	if process.NumOfArgsIs(3) {
+		switch v := process.Args[2].(type) {
+		case []string:
+			for _, s := range v {
+				updateColumns = append(updateColumns, s)
+			}
+		case []interface{}:
+			updateColumns = v
+		default:
+			exception.New("updateColumns parameter must be a string array", 400).Throw()
+		}
+	}
+
+	id, err := mod.Upsert(row, uniqueBy, updateColumns)
+	if err != nil {
+		exception.Err(err, 500).Throw()
+	}
+	return id
 }

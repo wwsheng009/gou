@@ -82,6 +82,20 @@ func TestProcessReload(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
+func TestProcessMetadata(t *testing.T) {
+	prepare(t)
+	defer clean()
+
+	p := process.New("models.user.metadata")
+	data, err := p.Exec()
+	assert.Nil(t, err)
+	assert.Equal(t, data.(MetaData).Name, "User")
+
+	p = process.New("models.not-found.metadata")
+	_, err = p.Exec()
+	assert.NotNil(t, err)
+}
+
 func TestProcessRead(t *testing.T) {
 	prepare(t)
 	defer clean()
@@ -89,7 +103,7 @@ func TestProcessRead(t *testing.T) {
 	p := process.New("models.user.read")
 	data, err := p.Exec()
 	assert.Nil(t, err)
-	assert.Equal(t, data.(MetaData).Name, "User")
+	assert.NotNil(t, data)
 
 	p = process.New("models.not-found.read")
 	_, err = p.Exec()
@@ -203,12 +217,12 @@ func TestProcessList(t *testing.T) {
 	}
 }
 
-func TestProcessGetModel(t *testing.T) {
+func TestProcessDSL(t *testing.T) {
 	prepare(t)
 	defer clean()
 
 	// Test with default options (no metadata or columns)
-	p := process.New("model.get", "user", map[string]interface{}{})
+	p := process.New("model.dsl", "user", map[string]interface{}{})
 	result, err := p.Exec()
 	assert.Nil(t, err)
 	modelData := result.(map[string]interface{})
@@ -219,7 +233,7 @@ func TestProcessGetModel(t *testing.T) {
 	assert.NotContains(t, modelData, "columns")
 
 	// Test with metadata option
-	p = process.New("model.get", "user", map[string]interface{}{"metadata": true})
+	p = process.New("model.dsl", "user", map[string]interface{}{"metadata": true})
 	result, err = p.Exec()
 	assert.Nil(t, err)
 	modelData = result.(map[string]interface{})
@@ -230,7 +244,7 @@ func TestProcessGetModel(t *testing.T) {
 	assert.NotContains(t, modelData, "columns")
 
 	// Test with columns option
-	p = process.New("model.get", "user", map[string]interface{}{"columns": true})
+	p = process.New("model.dsl", "user", map[string]interface{}{"columns": true})
 	result, err = p.Exec()
 	assert.Nil(t, err)
 	modelData = result.(map[string]interface{})
@@ -241,7 +255,7 @@ func TestProcessGetModel(t *testing.T) {
 	assert.NotContains(t, modelData, "metadata")
 
 	// Test with both options
-	p = process.New("model.get", "user", map[string]interface{}{"metadata": true, "columns": true})
+	p = process.New("model.dsl", "user", map[string]interface{}{"metadata": true, "columns": true})
 	result, err = p.Exec()
 	assert.Nil(t, err)
 	modelData = result.(map[string]interface{})
@@ -252,7 +266,7 @@ func TestProcessGetModel(t *testing.T) {
 	assert.Contains(t, modelData, "columns")
 
 	// Test with non-existent model
-	p = process.New("model.get", "non_existent_model", map[string]interface{}{})
+	p = process.New("model.dsl", "non_existent_model", map[string]interface{}{})
 	_, err = p.Exec()
 	assert.NotNil(t, err)
 }
@@ -512,6 +526,105 @@ func TestProcessSnapshotErrors(t *testing.T) {
 
 	// Test drop snapshot with invalid name
 	p = process.New("models.user.dropsnapshot", "invalid_snapshot")
+	_, err = p.Exec()
+	assert.NotNil(t, err)
+}
+
+func TestProcessUpsert(t *testing.T) {
+	prepare(t)
+	defer clean()
+	prepareTestData(t)
+
+	// Test upsert with string uniqueBy parameter - create a new record
+	p := process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 1",
+		"mobile": "13900001111",
+		"status": "enabled",
+	}, "mobile")
+	result, err := p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Update the record with the same mobile
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 1 Updated",
+		"mobile": "13900001111",
+		"status": "enabled",
+	}, "mobile")
+	result, err = p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Test upsert with string array uniqueBy parameter
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 2",
+		"mobile": "13900002222",
+		"status": "enabled",
+	}, []string{"mobile"})
+	result, err = p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Test upsert with interface array uniqueBy parameter
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 3",
+		"mobile": "13900003333",
+		"status": "enabled",
+	}, []interface{}{"mobile"})
+	result, err = p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Test upsert with updateColumns parameter - create a new record
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 4",
+		"mobile": "13900004444",
+		"status": "enabled",
+	}, "mobile", []string{"name", "status"})
+	result, err = p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Update with specific columns
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 4 Updated",
+		"mobile": "13900004444",
+		"status": "disabled",
+	}, "mobile", []string{"name", "status"})
+	result, err = p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Test upsert with interface array updateColumns parameter
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "Upsert User 5",
+		"mobile": "13900005555",
+		"status": "enabled",
+	}, "mobile", []interface{}{"name", "status"})
+	result, err = p.Exec()
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+
+	// Test upsert with invalid uniqueBy parameter
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name": "User with Invalid UniqueBy",
+	}, []int{1, 2})
+	_, err = p.Exec()
+	assert.NotNil(t, err)
+
+	// Test upsert with empty uniqueBy parameter
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name": "User with Empty UniqueBy",
+	}, []string{})
+	_, err = p.Exec()
+	assert.NotNil(t, err)
+
+	// Test upsert with invalid updateColumns parameter
+	p = process.New("models.user.upsert", map[string]interface{}{
+		"name":   "User with Invalid UpdateColumns",
+		"mobile": "13900006666",
+		"status": "enabled",
+	}, "mobile", 123)
 	_, err = p.Exec()
 	assert.NotNil(t, err)
 }
