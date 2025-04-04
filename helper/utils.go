@@ -2,6 +2,7 @@ package helper
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/fatih/color"
 	jsoniter "github.com/json-iterator/go"
@@ -58,51 +59,74 @@ func Dump(values ...interface{}) {
 	}
 }
 
-func PrintString(values ...interface{}) {
+// ToString returns a formatted string representation of the given variables
+func ToString(values ...interface{}) string {
+	var result strings.Builder
 
-	f := NewFormatter()
-	f.Indent = 4
-	f.RawStrings = true
-	for _, v := range values {
+	for i, v := range values {
+		if i > 0 {
+			result.WriteString("\n")
+		}
 
 		if err, ok := v.(error); ok {
-			color.Red(err.Error())
+			result.WriteString(err.Error())
 			continue
 		}
 
 		switch value := v.(type) {
-
 		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool:
-			fmt.Print(color.CyanString(fmt.Sprintf("%v", v)))
+			result.WriteString(fmt.Sprintf("%v", v))
 			continue
 
 		case string, []byte:
-			fmt.Print(color.GreenString(fmt.Sprintf("%s", v)))
+			result.WriteString(fmt.Sprintf("%s", v))
 			continue
 
 		case bridge.UndefinedT:
-			fmt.Print(color.MagentaString(value.String()))
+			result.WriteString(value.String())
 			continue
 
 		case bridge.FunctionT:
-			fmt.Print(color.CyanString(value.String()))
+			result.WriteString(value.String())
 			continue
 
 		case bridge.PromiseT:
-			fmt.Print(color.CyanString("Promise { " + value.String() + " }"))
+			result.WriteString("Promise { " + value.String() + " }")
 			continue
 
 		default:
-			var res interface{}
-			txt, err := jsoniter.Marshal(v)
+			txt, err := jsoniter.MarshalIndent(v, "", "    ")
 			if err != nil {
-				color.Red(err.Error())
+				result.WriteString(err.Error())
 				continue
 			}
-
-			jsoniter.Unmarshal(txt, &res)
-			bytes, _ := f.Marshal(res)
-			fmt.Print(string(bytes))
+			result.Write(txt)
 		}
 	}
+
+	return result.String()
+}
+
+// DumpError dumps the given variables in red color
+func DumpError(values ...interface{}) {
+	str := ToString(values...)
+	color.Red(str)
+}
+
+// DumpWarn dumps the given variables in yellow color
+func DumpWarn(values ...interface{}) {
+	str := ToString(values...)
+	color.Yellow(str)
+}
+
+// DumpInfo dumps the given variables in blue color
+func DumpInfo(values ...interface{}) {
+	str := ToString(values...)
+	color.Blue(str)
+}
+
+
+func Print(values ...interface{}) {
+	str := ToString(values...)
+	fmt.Print(str)
 }

@@ -66,15 +66,15 @@ func JsError(ctx *v8go.Context, err interface{}) *v8go.Value {
 		break
 
 	case error:
-		message = v.Error()
+		message = exception.Trim(v)
 		break
 
 	case *exception.Exception:
-		message = v.Message
+		message = exception.Trim(fmt.Errorf("%s", v.Message))
 		break
 
 	case exception.Exception:
-		message = v.Message
+		message = exception.Trim(fmt.Errorf("%s", v.Message))
 		break
 
 	default:
@@ -86,7 +86,7 @@ func JsError(ctx *v8go.Context, err interface{}) *v8go.Value {
 	if errorObj.IsFunction() {
 		fn, _ := errorObj.AsFunction()
 		m, _ := v8go.NewValue(ctx.Isolate(), message)
-		v, _ := fn.Call(v8go.Undefined(ctx.Isolate()), m)
+		v, _ := fn.Call(global, m)
 		return v
 	}
 
@@ -143,6 +143,7 @@ func GoValues(jsValues []*v8go.Value, ctx *v8go.Context) ([]interface{}, error) 
 // * |-----------------------------------------------------------
 // * | ✅ | nil                     | null                      |
 // * | ✅ | bool                    | boolean                   |
+// * | ✅ | error                   | Error                     |
 // * | ✅ | int                     | number(int)               |
 // * | ✅ | uint                    | number(int)               |
 // * | ✅ | uint8                   | number(int)               |
@@ -185,6 +186,9 @@ func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 
 	case string, int32, uint32, bool, *big.Int, float64:
 		return v8go.NewValue(ctx.Isolate(), v)
+
+	case error:
+		return JsError(ctx, v), nil
 
 	case []byte:
 
@@ -287,6 +291,7 @@ func jsValueParse(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 // *  | ✅ | boolean                   | bool                    |
 // *  | ✅ | number(int)               | int                     |
 // *  | ✅ | number(float)             | float64                 |
+// *  | ✅ | Error                     | error                   |
 // *  | ✅ | bigint                    | int64                   |
 // *  | ✅ | string               	  | string                  |
 // *  | ✅ | object(SharedArrayBuffer) | []byte                  |
@@ -309,6 +314,12 @@ func GoValue(value *v8go.Value, ctx *v8go.Context) (interface{}, error) {
 
 	if value.IsString() {
 		return value.String(), nil
+	}
+
+	// Native Error
+	if value.IsNativeError() {
+		message := exception.Trim(fmt.Errorf("%s", value.String()))
+		return fmt.Errorf("%s", message), nil
 	}
 
 	if value.IsBoolean() {
