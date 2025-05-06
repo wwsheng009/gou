@@ -236,7 +236,18 @@ func (obj *Object) put(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		args := info.Args()
 		var payload interface{}
 		if len(args) > 1 {
-			payload = args[1]
+			var err error
+			payload, err = bridge.GoValue(args[1], info.Context())
+			if err != nil {
+				resp := &http.Response{
+					Status:  400,
+					Code:    400,
+					Message: fmt.Sprintf("args[%d] parameter error: %s", 1, err.Error()),
+					Headers: map[string][]string{},
+					Data:    nil,
+				}
+				return obj.vReturn(info, resp)
+			}
 		}
 
 		req, err := obj.new(info, 0, 2)
@@ -258,7 +269,18 @@ func (obj *Object) patch(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		args := info.Args()
 		var payload interface{}
 		if len(args) > 1 {
-			payload = args[1]
+			var err error
+			payload, err = bridge.GoValue(args[1], info.Context())
+			if err != nil {
+				resp := &http.Response{
+					Status:  400,
+					Code:    400,
+					Message: fmt.Sprintf("args[%d] parameter error: %s", 1, err.Error()),
+					Headers: map[string][]string{},
+					Data:    nil,
+				}
+				return obj.vReturn(info, resp)
+			}
 		}
 
 		req, err := obj.new(info, 0, 2)
@@ -280,7 +302,18 @@ func (obj *Object) delete(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		args := info.Args()
 		var payload interface{}
 		if len(args) > 1 {
-			payload = args[1]
+			var err error
+			payload, err = bridge.GoValue(args[1], info.Context())
+			if err != nil {
+				resp := &http.Response{
+					Status:  400,
+					Code:    400,
+					Message: fmt.Sprintf("args[%d] parameter error: %s", 1, err.Error()),
+					Headers: map[string][]string{},
+					Data:    nil,
+				}
+				return obj.vReturn(info, resp)
+			}
 		}
 
 		req, err := obj.new(info, 0, 2)
@@ -303,7 +336,18 @@ func (obj *Object) send(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		method := args[0].String()
 		var payload interface{}
 		if len(args) > 2 {
-			payload = args[2]
+			var err error
+			payload, err = bridge.GoValue(args[2], info.Context())
+			if err != nil {
+				resp := &http.Response{
+					Status:  400,
+					Code:    400,
+					Message: fmt.Sprintf("args[%d] parameter error: %s", 2, err.Error()),
+					Headers: map[string][]string{},
+					Data:    nil,
+				}
+				return obj.vReturn(info, resp)
+			}
 		}
 
 		req, err := obj.new(info, 1, 3)
@@ -382,7 +426,18 @@ func (obj *Object) stream(iso *v8go.Isolate) *v8go.FunctionTemplate {
 
 		var payload interface{}
 		if len(args) > 3 {
-			payload = args[3]
+			var err error
+			payload, err = bridge.GoValue(args[3], info.Context())
+			if err != nil {
+				resp := &http.Response{
+					Status:  400,
+					Code:    400,
+					Message: fmt.Sprintf("args[%d] parameter error: %s", 3, err.Error()),
+					Headers: map[string][]string{},
+					Data:    nil,
+				}
+				return obj.vReturn(info, resp)
+			}
 		}
 
 		req, err := obj.new(info, 1, 4)
@@ -427,10 +482,6 @@ func (obj *Object) stream(iso *v8go.Isolate) *v8go.FunctionTemplate {
 			Data:    nil,
 		})
 	})
-}
-
-func (obj *Object) callback(info *v8go.FunctionCallbackInfo) {
-
 }
 
 func (obj *Object) vReturn(info *v8go.FunctionCallbackInfo, resp *http.Response) *v8go.Value {
