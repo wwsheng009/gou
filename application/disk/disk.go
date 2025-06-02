@@ -20,7 +20,7 @@ type Disk struct {
 }
 
 var defaultPatterns = []string{"*.yao", "*.json", "*.jsonc", "*.yaml", "*.yml", "*.so", "*.dll", "*.js", "*.py", "*.ts", "*.wasm"}
-var ignoreWatchPatterns = []string{"public", "data", "db", "logs", "dist"}
+var ignoreWatchPatterns = []string{"public", "data", "db", "logs", "dist", "node_modules"}
 
 // Open the application
 func Open(root string) (*Disk, error) {
