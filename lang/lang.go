@@ -175,6 +175,27 @@ func Replace(value *string) bool {
 	return false
 }
 
+func ReplaceWithLangName(value *string, langName string) bool {
+	if Default == nil {
+		return false
+	}
+
+	if value == nil {
+		return false
+	}
+	lang := Pick(langName)
+	if lang == nil {
+		return false
+	}
+
+	if v, has := lang.Global[*value]; has {
+		*value = v
+		return true
+	}
+
+	return false
+}
+
 // AsDefault set current dict as default
 func (dict *Dict) AsDefault() *Dict {
 	Default = dict

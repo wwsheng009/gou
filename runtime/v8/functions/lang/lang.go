@@ -24,8 +24,17 @@ func replace(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		return args[0]
 	}
 
+	langName := ""
+	if len(args) > 1 && args[1].IsString() {
+		langName = args[1].String()
+	}
+
 	value := strings.TrimPrefix(args[0].String(), "::")
-	lang.Replace(&value)
+	if langName != "" {
+		lang.ReplaceWithLangName(&value, langName)
+	} else {
+		lang.Replace(&value)
+	}
 
 	jsValue, err := bridge.JsValue(info.Context(), value)
 	if err != nil {
