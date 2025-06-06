@@ -55,7 +55,8 @@ var FileSystemHandlers = map[string]process.Handler{
 	"zip":              processZip,
 	"unzip":            processUnzip,
 	"glob":             processGlob,
-	"merge":           processMerge,
+	"merge":            processMerge,
+	"abs":              processAbsPath,
 }
 
 func init() {
@@ -65,6 +66,17 @@ func init() {
 func stor(process *process.Process) FileSystem {
 	name := strings.ToLower(process.ID)
 	return MustGet(name)
+}
+
+func processAbsPath(process *process.Process) interface{} {
+	process.ValidateArgNums(1)
+	stor := stor(process)
+	file := process.ArgsString(0)
+	abs, err := stor.AbsPath(file)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+	}
+	return abs
 }
 
 func processReadFile(process *process.Process) interface{} {
@@ -821,16 +833,15 @@ func getChunkFiles(stor FileSystem, path string, sortable bool) ([]string, error
 	return files, nil
 }
 
-
 func processMerge(process *process.Process) interface{} {
 
 	process.ValidateArgNums(2)
 	stor := stor(process)
 	sourceFiles := process.ArgsStrings(0)
 	target := process.ArgsString(1)
-	err := stor.Merge(sourceFiles,target)
+	err := stor.Merge(sourceFiles, target)
 	if err != nil {
 		exception.New(err.Error(), 500).Throw()
 	}
-	return nil;
+	return nil
 }

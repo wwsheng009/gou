@@ -250,10 +250,11 @@ func Copy(xfs FileSystem, name string, dst string) error {
 	return xfs.Copy(name, dst)
 }
 
-//merge files into new file
+// merge files into new file
 func Merge(xfs FileSystem, fileList []string, dst string) error {
 	return xfs.Merge(fileList, dst)
 }
+
 // Exists returns a boolean indicating whether the error is known to report that a file or directory already exists.
 // It is satisfied by ErrExist as well as some syscall errors.
 func Exists(xfs FileSystem, name string) (bool, error) {
@@ -517,4 +518,9 @@ func DirName(name string) string {
 // ExtName return the extension name
 func ExtName(name string) string {
 	return strings.TrimPrefix(filepath.Ext(name), ".")
+}
+
+// AbsPath return the absolute path
+func AbsPath(xfs FileSystem, name string) (string, error) {
+	return xfs.AbsPath(name)
 }

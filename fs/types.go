@@ -55,4 +55,6 @@ type FileSystem interface {
 	CleanCache()
 
 	Merge(fileList []string, dest string) error
+
+	AbsPath(path string) (string, error)
 }

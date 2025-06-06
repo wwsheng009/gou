@@ -668,7 +668,7 @@ func (f *File) Move(oldpath string, newpath string) error {
 		return f.copyRemove(f.relPath(oldpath), f.relPath(newpath))
 	}
 	err = os.Rename(oldpath, newpath)
-	
+
 	if err != nil && strings.Contains(err.Error(), "invalid cross-device link") {
 		return f.copyRemove(f.relPath(oldpath), f.relPath(newpath))
 	}
@@ -994,17 +994,19 @@ func filterMatchesCache(path string, filter func(string) bool) bool {
 func (f *File) isTemp(path string) bool {
 	return strings.HasPrefix(path, os.TempDir())
 }
+func (f *File) AbsPath(path string) (string, error) {
+	return f.absPath(path)
+}
 
 // absPath returns an absolute representation of path
 func (f *File) absPath(path string) (string, error) {
+	if !pathSafe(path) {
+		return "", fmt.Errorf("%s is not safe", path)
+	}
 	if f.root != "" {
 		if !f.isTemp(path) {
 			path = filepath.Join(f.root, path)
 		}
-	}
-
-	if !pathSafe(path) {
-		return "", fmt.Errorf("%s is not safe", path)
 	}
 
 	absPath, err := filepath.Abs(path)

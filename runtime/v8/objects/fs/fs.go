@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -559,8 +558,11 @@ func (obj *Object) abs(iso *v8go.Isolate) *v8go.FunctionTemplate {
 		if err != nil {
 			return obj.error(info, err)
 		}
-
-		file := filepath.Join(stor.Root(), args[0].String())
+		file, err := fs.AbsPath(stor, args[0].String())
+		if err != nil {
+			return obj.error(info, err)
+		}
+		// file := filepath.Join(stor.Root(), args[0].String())
 		return obj.stringValue(info, file)
 	})
 }
