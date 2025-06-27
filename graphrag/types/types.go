@@ -130,6 +130,12 @@ type MediaPosition struct {
 	Page      int `json:"page"`       // Page number (for PDF, Word, etc.)
 }
 
+// Position represents a position in the text
+type Position struct {
+	StartPos int `json:"s"`
+	EndPos   int `json:"e"`
+}
+
 // Chunk represents a chunk of content with position information
 type Chunk struct {
 	ID       string       `json:"id,omitempty"`
@@ -332,20 +338,160 @@ func GetChunkingTypeFromFilename(filename string) ChunkingType {
 	}
 }
 
+// ===== Pagination Types =====
+
+// PaginationStrategy represents different pagination strategies supported by vector databases
+type PaginationStrategy string
+
+const (
+	// PaginationStrategyOffset represents traditional offset/limit pagination (page/pagesize)
+	// Pros: Simple, supports random access to pages, familiar API
+	// Cons: Performance degrades with large offsets, inconsistent results during data changes
+	// Best for: Small to medium datasets, UI pagination with page numbers
+	PaginationStrategyOffset PaginationStrategy = "offset"
+
+	// PaginationStrategyCursor represents cursor-based pagination using tokens
+	// Pros: Consistent performance, stable results during data changes
+	// Cons: No random access, more complex implementation
+	// Best for: Large datasets, real-time feeds, high-performance requirements
+	PaginationStrategyCursor PaginationStrategy = "cursor"
+
+	// PaginationStrategyClientSlice represents client-side slicing after fetching larger result sets
+	// Pros: Simple implementation, works with any vector database
+	// Cons: Higher memory usage, network overhead, limited to smaller datasets
+	// Best for: Simple use cases, databases without native pagination support (like Qdrant)
+	PaginationStrategyClientSlice PaginationStrategy = "client_slice"
+
+	// PaginationStrategyScroll represents scroll-based pagination (like Elasticsearch scroll API)
+	// Pros: Efficient for large datasets, maintains search context
+	// Cons: Stateful, requires cleanup, limited concurrent access
+	// Best for: Bulk data processing, export operations
+	PaginationStrategyScroll PaginationStrategy = "scroll"
+)
+
+// Pagination represents unified pagination options supporting both offset and cursor-based pagination
+type Pagination struct {
+	// Offset-based pagination (traditional page/pagesize)
+	Page     int `json:"page,omitempty"`      // Page number (1-based), 0 means no pagination
+	PageSize int `json:"page_size,omitempty"` // Number of results per page (default: 10)
+
+	// Cursor-based pagination (for better performance with large datasets)
+	Cursor string `json:"cursor,omitempty"` // Cursor token for cursor-based pagination
+
+	// Control options
+	IncludeTotal bool `json:"include_total,omitempty"` // Whether to calculate total count (expensive for large datasets)
+}
+
+// PaginationResult represents unified pagination response metadata
+type PaginationResult struct {
+	// Offset-based pagination info
+	Page         int   `json:"page,omitempty"`          // Current page number (1-based)
+	PageSize     int   `json:"page_size,omitempty"`     // Number of results per page
+	Total        int64 `json:"total,omitempty"`         // Total number of matching documents (if IncludeTotal=true)
+	TotalPages   int   `json:"total_pages,omitempty"`   // Total number of pages (if IncludeTotal=true)
+	HasNext      bool  `json:"has_next,omitempty"`      // Whether there are more pages
+	HasPrevious  bool  `json:"has_previous,omitempty"`  // Whether there are previous pages
+	NextPage     int   `json:"next_page,omitempty"`     // Next page number (if HasNext=true)
+	PreviousPage int   `json:"previous_page,omitempty"` // Previous page number (if HasPrevious=true)
+
+	// Cursor-based pagination info
+	Cursor     string `json:"cursor,omitempty"`      // Current cursor position
+	NextCursor string `json:"next_cursor,omitempty"` // Cursor for next page (if HasNext=true)
+	PrevCursor string `json:"prev_cursor,omitempty"` // Cursor for previous page (if HasPrevious=true)
+}
+
+// IsOffsetBased returns true if using offset-based pagination (page/pagesize)
+func (p *Pagination) IsOffsetBased() bool {
+	return p.Page > 0 && p.PageSize > 0 && p.Cursor == ""
+}
+
+// IsCursorBased returns true if using cursor-based pagination
+func (p *Pagination) IsCursorBased() bool {
+	return p.Cursor != ""
+}
+
+// GetOffset calculates the offset for offset-based pagination
+func (p *Pagination) GetOffset() int {
+	if !p.IsOffsetBased() {
+		return 0
+	}
+	return (p.Page - 1) * p.PageSize
+}
+
+// GetLimit returns the limit/pagesize for pagination
+func (p *Pagination) GetLimit() int {
+	if p.PageSize <= 0 {
+		return 10 // default page size
+	}
+	return p.PageSize
+}
+
+// GetStrategy returns the pagination strategy being used
+func (p *Pagination) GetStrategy() PaginationStrategy {
+	if p.IsCursorBased() {
+		return PaginationStrategyCursor
+	}
+	if p.IsOffsetBased() {
+		return PaginationStrategyOffset
+	}
+	return PaginationStrategyClientSlice // default for non-paginated requests
+}
+
 // ===== Vector Store Types =====
 
 // Document represents a document with content and metadata
 type Document struct {
-	ID          string                 `json:"id,omitempty"`
-	PageContent string                 `json:"page_content"`
-	Vector      []float64              `json:"vector,omitempty"` // Document embedding vector
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	ID           string                 `json:"id,omitempty"`
+	Content      string                 `json:"content"`
+	Vector       []float64              `json:"vector,omitempty"`        // Dense vector (legacy field for backward compatibility)
+	DenseVector  []float64              `json:"dense_vector,omitempty"`  // Dense embedding vector
+	SparseVector *SparseVector          `json:"sparse_vector,omitempty"` // Sparse embedding vector
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// SearchResult represents a search result with document and score
-type SearchResult struct {
+// HasDenseVector returns true if the document has a dense vector (either Vector or DenseVector fields)
+func (d *Document) HasDenseVector() bool {
+	return len(d.Vector) > 0 || len(d.DenseVector) > 0
+}
+
+// HasSparseVector returns true if the document has a sparse vector
+func (d *Document) HasSparseVector() bool {
+	return d.SparseVector != nil && len(d.SparseVector.Indices) > 0
+}
+
+// GetDenseVector returns the dense vector, prioritizing DenseVector field over legacy Vector field
+func (d *Document) GetDenseVector() []float64 {
+	if len(d.DenseVector) > 0 {
+		return d.DenseVector
+	}
+	return d.Vector
+}
+
+// GetSparseVector returns the sparse vector
+func (d *Document) GetSparseVector() *SparseVector {
+	return d.SparseVector
+}
+
+// SearchResultItem represents a single search result with document and score
+type SearchResultItem struct {
 	Document Document `json:"document"`
 	Score    float64  `json:"score"`
+}
+
+// SearchResult represents unified search results (both paginated and non-paginated)
+type SearchResult struct {
+	// Results
+	Documents []*SearchResultItem `json:"documents"` // Search results
+
+	// Pagination metadata (embedded for backward compatibility)
+	PaginationResult `json:",inline"`
+
+	// Search engine features
+	QueryTime   int64                   `json:"query_time_ms"`         // Query execution time in milliseconds
+	Facets      map[string]*SearchFacet `json:"facets,omitempty"`      // Faceted search results
+	Suggestions []string                `json:"suggestions,omitempty"` // Query suggestions for typos/alternatives
+	MaxScore    float64                 `json:"max_score,omitempty"`   // Highest score in results
+	MinScore    float64                 `json:"min_score,omitempty"`   // Lowest score in results
 }
 
 // VectorStoreConfig represents configuration for vector store
@@ -363,6 +509,11 @@ type VectorStoreConfig struct {
 	// Index Parameters (for IVF)
 	NumLists  int `json:"num_lists,omitempty"`  // Number of clusters (IVF)
 	NumProbes int `json:"num_probes,omitempty"` // Number of clusters to search (IVF)
+
+	// Sparse Vector Configuration (for hybrid search)
+	EnableSparseVectors bool   `json:"enable_sparse_vectors,omitempty"` // Enable sparse vector support for hybrid retrieval
+	DenseVectorName     string `json:"dense_vector_name,omitempty"`     // Named vector for dense vectors (default: "dense")
+	SparseVectorName    string `json:"sparse_vector_name,omitempty"`    // Named vector for sparse vectors (default: "sparse")
 
 	// Storage Configuration
 	CollectionName string `json:"collection_name"`        // Collection/Table name
@@ -389,7 +540,65 @@ func (c *VectorStoreConfig) Validate() error {
 	if c.CollectionName == "" {
 		return fmt.Errorf("collection name cannot be empty")
 	}
+
+	// Validate sparse vector configuration
+	if c.EnableSparseVectors {
+		// Check for naming conflicts
+		denseVectorName := c.DenseVectorName
+		if denseVectorName == "" {
+			denseVectorName = "dense"
+		}
+
+		sparseVectorName := c.SparseVectorName
+		if sparseVectorName == "" {
+			sparseVectorName = "sparse"
+		}
+
+		if denseVectorName == sparseVectorName {
+			return fmt.Errorf("dense and sparse vector names cannot be the same: %s", denseVectorName)
+		}
+	}
+
 	return nil
+}
+
+// VectorMode represents the vector operation mode for document operations
+type VectorMode string
+
+const (
+	// VectorModeAuto automatically determines which vectors to use based on what's available in the document
+	VectorModeAuto VectorMode = "auto"
+	// VectorModeDenseOnly only processes dense vectors, ignores sparse vectors
+	VectorModeDenseOnly VectorMode = "dense_only"
+	// VectorModeSparseOnly only processes sparse vectors, ignores dense vectors
+	VectorModeSparseOnly VectorMode = "sparse_only"
+	// VectorModeBoth processes both dense and sparse vectors (requires both to be present)
+	VectorModeBoth VectorMode = "both"
+)
+
+// String returns the string representation of the vector mode
+func (vm VectorMode) String() string {
+	return string(vm)
+}
+
+// IsValid checks if the vector mode is valid
+func (vm VectorMode) IsValid() bool {
+	switch vm {
+	case VectorModeAuto, VectorModeDenseOnly, VectorModeSparseOnly, VectorModeBoth:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetSupportedVectorModes returns all supported vector modes
+func GetSupportedVectorModes() []VectorMode {
+	return []VectorMode{
+		VectorModeAuto,
+		VectorModeDenseOnly,
+		VectorModeSparseOnly,
+		VectorModeBoth,
+	}
 }
 
 // AddDocumentOptions represents options for adding documents
@@ -399,14 +608,34 @@ type AddDocumentOptions struct {
 	BatchSize      int         `json:"batch_size,omitempty"` // Batch size for bulk insert
 	Timeout        int         `json:"timeout,omitempty"`    // Operation timeout in seconds
 	Upsert         bool        `json:"upsert,omitempty"`     // If true, update existing documents with same ID
+
+	// Vector operation mode - determines which vectors to insert/update
+	VectorMode VectorMode `json:"vector_mode,omitempty"` // "dense_only", "sparse_only", "both", "auto" (default: "auto")
+
+	// Named vector support (for collections with multiple vectors)
+	VectorUsing      string `json:"vector_using,omitempty"`       // Named vector to use for document vectors (e.g., "dense", "sparse") - legacy field
+	DenseVectorName  string `json:"dense_vector_name,omitempty"`  // Named vector for dense vectors (default: "dense")
+	SparseVectorName string `json:"sparse_vector_name,omitempty"` // Named vector for sparse vectors (default: "sparse")
 }
 
 // SearchOptions represents options for similarity search
 type SearchOptions struct {
 	CollectionName string                 `json:"collection_name"`
 	QueryVector    []float64              `json:"query_vector"`     // Query vector for similarity search
-	K              int                    `json:"k,omitempty"`      // Number of documents to return
+	K              int                    `json:"k,omitempty"`      // Number of documents to return (ignored if using pagination)
 	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
+
+	// Pagination (optional - if not specified, returns top K results)
+	Page     int    `json:"page,omitempty"`      // Page number (1-based), 0 means no pagination
+	PageSize int    `json:"page_size,omitempty"` // Number of results per page (default: 10)
+	Cursor   string `json:"cursor,omitempty"`    // Cursor for cursor-based pagination (alternative to page/pagesize)
+
+	// Return control options
+	IncludeVector   bool     `json:"include_vector"`   // Whether to include vector data in results
+	IncludeMetadata bool     `json:"include_metadata"` // Whether to include document metadata
+	IncludeContent  bool     `json:"include_content"`  // Whether to include document content
+	Fields          []string `json:"fields,omitempty"` // Specific fields to retrieve
+	IncludeTotal    bool     `json:"include_total"`    // Whether to calculate total count (expensive for pagination)
 
 	// Search-specific parameters
 	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter (HNSW)
@@ -414,21 +643,52 @@ type SearchOptions struct {
 	Rescore     bool `json:"rescore,omitempty"`     // Whether to rescore results
 	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
 	Timeout     int  `json:"timeout,omitempty"`     // Search timeout in milliseconds
+
+	// Search engine specific options
+	MinScore        float64  `json:"min_score,omitempty"`        // Minimum similarity score to include
+	MaxResults      int      `json:"max_results,omitempty"`      // Maximum total results to consider (default: 1000)
+	SortBy          []string `json:"sort_by,omitempty"`          // Secondary sorting criteria
+	FacetFields     []string `json:"facet_fields,omitempty"`     // Fields for faceted search
+	HighlightFields []string `json:"highlight_fields,omitempty"` // Fields to highlight in results
+
+	// Named vector support (for collections with multiple vectors)
+	VectorUsing string `json:"vector_using,omitempty"` // Named vector to use for search (e.g., "dense", "sparse")
 }
 
 // MMRSearchOptions represents options for maximal marginal relevance search
 type MMRSearchOptions struct {
 	CollectionName string                 `json:"collection_name"`
 	QueryVector    []float64              `json:"query_vector"`          // Query vector for similarity search
-	K              int                    `json:"k,omitempty"`           // Number of documents to return
+	K              int                    `json:"k,omitempty"`           // Number of documents to return (ignored if using pagination)
 	FetchK         int                    `json:"fetch_k,omitempty"`     // Number of documents to fetch for MMR algorithm
 	LambdaMult     float64                `json:"lambda_mult,omitempty"` // Diversity parameter (0-1, 0=max diversity, 1=max similarity)
 	Filter         map[string]interface{} `json:"filter,omitempty"`      // Metadata filter
+
+	// Pagination (optional - if not specified, returns top K results)
+	Page     int    `json:"page,omitempty"`      // Page number (1-based), 0 means no pagination
+	PageSize int    `json:"page_size,omitempty"` // Number of results per page (default: 10)
+	Cursor   string `json:"cursor,omitempty"`    // Cursor for cursor-based pagination (alternative to page/pagesize)
+
+	// Return control options
+	IncludeVector   bool     `json:"include_vector"`   // Whether to include vector data in results
+	IncludeMetadata bool     `json:"include_metadata"` // Whether to include document metadata
+	IncludeContent  bool     `json:"include_content"`  // Whether to include document content
+	Fields          []string `json:"fields,omitempty"` // Specific fields to retrieve
+	IncludeTotal    bool     `json:"include_total"`    // Whether to calculate total count (expensive for pagination)
 
 	// Search parameters
 	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
 	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
 	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
+	Timeout     int  `json:"timeout,omitempty"`     // Search timeout in milliseconds
+
+	// Search engine specific options
+	MinScore    float64  `json:"min_score,omitempty"`    // Minimum similarity score to include
+	MaxResults  int      `json:"max_results,omitempty"`  // Maximum total results to consider
+	FacetFields []string `json:"facet_fields,omitempty"` // Fields for faceted search
+
+	// Named vector support (for collections with multiple vectors)
+	VectorUsing string `json:"vector_using,omitempty"` // Named vector to use for search (e.g., "dense", "sparse")
 }
 
 // ScoreThresholdOptions represents options for similarity search with score threshold
@@ -436,59 +696,174 @@ type ScoreThresholdOptions struct {
 	CollectionName string                 `json:"collection_name"`
 	QueryVector    []float64              `json:"query_vector"`     // Query vector for similarity search
 	ScoreThreshold float64                `json:"score_threshold"`  // Minimum relevance score threshold
-	K              int                    `json:"k,omitempty"`      // Number of documents to return
+	K              int                    `json:"k,omitempty"`      // Number of documents to return (ignored if using pagination)
 	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
+
+	// Pagination (optional - if not specified, returns top K results)
+	Page     int    `json:"page,omitempty"`      // Page number (1-based), 0 means no pagination
+	PageSize int    `json:"page_size,omitempty"` // Number of results per page (default: 10)
+	Cursor   string `json:"cursor,omitempty"`    // Cursor for cursor-based pagination (alternative to page/pagesize)
+
+	// Return control options
+	IncludeVector   bool     `json:"include_vector"`   // Whether to include vector data in results
+	IncludeMetadata bool     `json:"include_metadata"` // Whether to include document metadata
+	IncludeContent  bool     `json:"include_content"`  // Whether to include document content
+	Fields          []string `json:"fields,omitempty"` // Specific fields to retrieve
+	IncludeTotal    bool     `json:"include_total"`    // Whether to calculate total count (expensive for pagination)
 
 	// Search parameters
 	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
 	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
 	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
+	Timeout     int  `json:"timeout,omitempty"`     // Search timeout in milliseconds
+
+	// Search engine specific options
+	MaxResults      int      `json:"max_results,omitempty"`      // Maximum total results to consider
+	SortBy          []string `json:"sort_by,omitempty"`          // Secondary sorting criteria
+	FacetFields     []string `json:"facet_fields,omitempty"`     // Fields for faceted search
+	HighlightFields []string `json:"highlight_fields,omitempty"` // Fields to highlight in results
+
+	// Named vector support (for collections with multiple vectors)
+	VectorUsing string `json:"vector_using,omitempty"` // Named vector to use for search (e.g., "dense", "sparse")
 }
 
-// ===== Batch Search Options =====
-
-// BatchSearchOptions represents options for batch similarity search
-type BatchSearchOptions struct {
+// HybridSearchOptions represents options for hybrid (vector + keyword) search using Qdrant's native Query API
+type HybridSearchOptions struct {
 	CollectionName string                 `json:"collection_name"`
-	QueryVectors   [][]float64            `json:"query_vectors"`    // Multiple query vectors for batch search
-	K              int                    `json:"k,omitempty"`      // Number of documents to return per query
-	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
+	QueryVector    []float64              `json:"query_vector,omitempty"` // Dense vector query (optional if only using sparse vector search)
+	QuerySparse    *SparseVector          `json:"query_sparse,omitempty"` // Sparse vector query (e.g., from BM25, TF-IDF)
+	K              int                    `json:"k,omitempty"`            // Number of documents to return (ignored if using pagination)
+	Filter         map[string]interface{} `json:"filter,omitempty"`       // Metadata filter
 
-	// Search-specific parameters
+	// Pagination (optional - if not specified, returns top K results)
+	Page     int    `json:"page,omitempty"`      // Page number (1-based), 0 means no pagination
+	PageSize int    `json:"page_size,omitempty"` // Number of results per page (default: 10)
+	Cursor   string `json:"cursor,omitempty"`    // Cursor for cursor-based pagination (alternative to page/pagesize)
+
+	// Return control options
+	IncludeVector   bool     `json:"include_vector"`   // Whether to include vector data in results
+	IncludeMetadata bool     `json:"include_metadata"` // Whether to include document metadata
+	IncludeContent  bool     `json:"include_content"`  // Whether to include document content
+	Fields          []string `json:"fields,omitempty"` // Specific fields to retrieve
+	IncludeTotal    bool     `json:"include_total"`    // Whether to calculate total count (expensive for pagination)
+
+	// Hybrid search fusion configuration
+	FusionType  FusionType `json:"fusion_type,omitempty"`  // Fusion algorithm: "rrf" (Reciprocal Rank Fusion) or "dbsf" (Distribution-Based Score Fusion)
+	VectorUsing string     `json:"vector_using,omitempty"` // Named vector for dense vectors (e.g., "dense")
+	SparseUsing string     `json:"sparse_using,omitempty"` // Named vector for sparse vectors (e.g., "sparse")
+
+	// Legacy weight support (will be converted to appropriate fusion)
+	VectorWeight  float64 `json:"vector_weight,omitempty"`  // Weight for vector similarity (0-1) - for backward compatibility
+	KeywordWeight float64 `json:"keyword_weight,omitempty"` // Weight for keyword relevance (0-1) - for backward compatibility
+
+	// Vector search parameters
 	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter (HNSW)
 	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes (IVF)
 	Rescore     bool `json:"rescore,omitempty"`     // Whether to rescore results
 	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
 	Timeout     int  `json:"timeout,omitempty"`     // Search timeout in milliseconds
+
+	// Search engine specific options
+	MinScore        float64  `json:"min_score,omitempty"`        // Minimum combined score
+	MaxResults      int      `json:"max_results,omitempty"`      // Maximum total results to consider (default: 1000)
+	SortBy          []string `json:"sort_by,omitempty"`          // Secondary sorting criteria
+	FacetFields     []string `json:"facet_fields,omitempty"`     // Fields for faceted search
+	HighlightFields []string `json:"highlight_fields,omitempty"` // Fields to highlight in results
 }
 
-// BatchMMRSearchOptions represents options for batch maximal marginal relevance search
-type BatchMMRSearchOptions struct {
-	CollectionName string                 `json:"collection_name"`
-	QueryVectors   [][]float64            `json:"query_vectors"`         // Multiple query vectors for batch search
-	K              int                    `json:"k,omitempty"`           // Number of documents to return per query
-	FetchK         int                    `json:"fetch_k,omitempty"`     // Number of documents to fetch for MMR algorithm
-	LambdaMult     float64                `json:"lambda_mult,omitempty"` // Diversity parameter (0-1, 0=max diversity, 1=max similarity)
-	Filter         map[string]interface{} `json:"filter,omitempty"`      // Metadata filter
-
-	// Search parameters
-	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
-	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
-	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
+// SparseVector represents a sparse vector with indices and values
+type SparseVector struct {
+	Indices []uint32  `json:"indices"` // Non-zero indices
+	Values  []float32 `json:"values"`  // Non-zero values
 }
 
-// BatchScoreThresholdOptions represents options for batch similarity search with score threshold
-type BatchScoreThresholdOptions struct {
-	CollectionName string                 `json:"collection_name"`
-	QueryVectors   [][]float64            `json:"query_vectors"`    // Multiple query vectors for batch search
-	ScoreThreshold float64                `json:"score_threshold"`  // Minimum relevance score threshold
-	K              int                    `json:"k,omitempty"`      // Number of documents to return per query
-	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
+// FusionType represents the type of fusion algorithm to use
+type FusionType string
 
-	// Search parameters
-	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
-	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
-	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
+const (
+	// FusionRRF represents Reciprocal Rank Fusion
+	FusionRRF FusionType = "rrf"
+	// FusionDBSF represents Distribution-Based Score Fusion
+	FusionDBSF FusionType = "dbsf"
+)
+
+// String returns the string representation of the fusion type
+func (ft FusionType) String() string {
+	return string(ft)
+}
+
+// IsValid checks if the fusion type is valid
+func (ft FusionType) IsValid() bool {
+	switch ft {
+	case FusionRRF, FusionDBSF:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetType returns the type of the search options
+func (h *HybridSearchOptions) GetType() SearchType {
+	return SearchTypeHybrid
+}
+
+// GetType returns the type of the search options
+func (m *MMRSearchOptions) GetType() SearchType {
+	return SearchTypeMMR
+}
+
+// GetType returns the type of the search options
+func (s *ScoreThresholdOptions) GetType() SearchType {
+	return SearchTypeScoreThreshold
+}
+
+// GetType returns the type of the search options
+func (s *SearchOptions) GetType() SearchType {
+	return SearchTypeSimilarity
+}
+
+// SearchType represents the type of search operation
+type SearchType string
+
+const (
+	// SearchTypeSimilarity represents similarity-based vector search
+	SearchTypeSimilarity SearchType = "similarity"
+	// SearchTypeMMR represents maximal marginal relevance search for diversity
+	SearchTypeMMR SearchType = "mmr"
+	// SearchTypeScoreThreshold represents similarity search with minimum score filtering
+	SearchTypeScoreThreshold SearchType = "score_threshold"
+	// SearchTypeHybrid represents hybrid search combining vector and keyword search
+	SearchTypeHybrid SearchType = "hybrid"
+)
+
+// String returns the string representation of the search type
+func (st SearchType) String() string {
+	return string(st)
+}
+
+// IsValid checks if the search type is valid
+func (st SearchType) IsValid() bool {
+	switch st {
+	case SearchTypeSimilarity, SearchTypeMMR, SearchTypeScoreThreshold, SearchTypeHybrid:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetSupportedSearchTypes returns all supported search types
+func GetSupportedSearchTypes() []SearchType {
+	return []SearchType{
+		SearchTypeSimilarity,
+		SearchTypeMMR,
+		SearchTypeScoreThreshold,
+		SearchTypeHybrid,
+	}
+}
+
+// SearchOptionsInterface represents options for batch search
+type SearchOptionsInterface interface {
+	GetType() SearchType
 }
 
 // RetrieverOptions represents options for creating a retriever
@@ -508,13 +883,169 @@ type VectorStoreStats struct {
 	ExtraStats     map[string]interface{} `json:"extra_stats,omitempty"`
 }
 
+// ProgressCallback defines the callback function for progress reporting with flexible payload
+
+// EmbeddingStatus defines the status of embedding process
+type EmbeddingStatus string
+
+// Status constants for embedding process
+const (
+	EmbeddingStatusStarting   EmbeddingStatus = "starting"   // Starting the embedding process
+	EmbeddingStatusProcessing EmbeddingStatus = "processing" // Processing embeddings
+	EmbeddingStatusCompleted  EmbeddingStatus = "completed"  // Successfully completed
+	EmbeddingStatusError      EmbeddingStatus = "error"      // Error occurred
+)
+
+// EmbeddingPayload contains context-specific data for different embedding scenarios
+type EmbeddingPayload struct {
+	// Common fields
+	Current int    `json:"current"` // Current progress count
+	Total   int    `json:"total"`   // Total items to process
+	Message string `json:"message"` // Status message
+
+	// Document embedding specific
+	DocumentIndex *int    `json:"document_index,omitempty"` // Index of current document being processed
+	DocumentText  *string `json:"document_text,omitempty"`  // Text being processed (truncated if too long)
+
+	// Error specific
+	Error error `json:"error,omitempty"` // Error details when Status is StatusError
+}
+
+// ExtractionStatus defines the status of extraction process
+type ExtractionStatus string
+
+// Status constants for extraction process
+const (
+	ExtractionStatusStarting   ExtractionStatus = "starting"   // Starting the extraction process
+	ExtractionStatusProcessing ExtractionStatus = "processing" // Processing extraction
+	ExtractionStatusCompleted  ExtractionStatus = "completed"  // Successfully completed
+	ExtractionStatusError      ExtractionStatus = "error"      // Error occurred
+)
+
+// EntityStatus defines the lifecycle status of nodes and relationships
+type EntityStatus string
+
+// Status constants for entity lifecycle management (applies to both nodes and relationships)
+const (
+	EntityStatusActive     EntityStatus = "active"     // Active entity in use
+	EntityStatusMerged     EntityStatus = "merged"     // Merged into another entity
+	EntityStatusDeprecated EntityStatus = "deprecated" // No longer used but preserved
+	EntityStatusDraft      EntityStatus = "draft"      // Draft/unconfirmed entity
+	EntityStatusReviewed   EntityStatus = "reviewed"   // Human reviewed and confirmed
+)
+
+// ExtractionMethod defines the method used for extracting entities and relationships
+type ExtractionMethod string
+
+// Extraction method constants based on actual implementation directories
+const (
+	ExtractionMethodLLM     ExtractionMethod = "llm"     // LLM-based extraction (OpenAI, etc.)
+	ExtractionMethodSpacy   ExtractionMethod = "spacy"   // spaCy NER-based extraction
+	ExtractionMethodDeppke  ExtractionMethod = "deppke"  // Deppke extraction method
+	ExtractionMethodManual  ExtractionMethod = "manual"  // Manual/user-defined extraction
+	ExtractionMethodPattern ExtractionMethod = "pattern" // Pattern-based extraction
+)
+
+// String returns the string representation of ExtractionMethod
+func (em ExtractionMethod) String() string {
+	return string(em)
+}
+
+// IsValid validates if the extraction method is supported
+func (em ExtractionMethod) IsValid() bool {
+	switch em {
+	case ExtractionMethodLLM, ExtractionMethodSpacy, ExtractionMethodDeppke,
+		ExtractionMethodManual, ExtractionMethodPattern:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetSupportedExtractionMethods returns all supported extraction methods
+func GetSupportedExtractionMethods() []ExtractionMethod {
+	return []ExtractionMethod{
+		ExtractionMethodLLM,
+		ExtractionMethodSpacy,
+		ExtractionMethodDeppke,
+		ExtractionMethodManual,
+		ExtractionMethodPattern,
+	}
+}
+
+// ExtractionPayload contains context-specific data for different extraction scenarios
+type ExtractionPayload struct {
+	// Common fields
+	Current int    `json:"current"` // Current progress count
+	Total   int    `json:"total"`   // Total items to process
+	Message string `json:"message"` // Status message
+
+	// Document embedding specific
+	DocumentIndex *int    `json:"document_index,omitempty"` // Index of current document being processed
+	DocumentText  *string `json:"document_text,omitempty"`  // Text being processed (truncated if too long)
+
+	// Error specific
+	Error error `json:"error,omitempty"` // Error details when Status is StatusError
+}
+
+// ExtractionOptions represents options for extraction
+type ExtractionOptions struct {
+	Use          Extraction   `json:"use"`           // Use the extraction method
+	Embedding    Embedding    `json:"embedding"`     // Embedding function to use for extraction
+	LLMOptimizer LLMOptimizer `json:"llm_optimizer"` // LLM optimizer for extraction, deduplication, optimization, etc. if not provided, will not be used
+}
+
+// LLMOptimizer represents the LLM optimizer for extraction
+type LLMOptimizer struct {
+	Connector string `json:"connector"` // Connector to use for extraction
+}
+
+// ExtractionResult represents the result of an extraction process
+type ExtractionResult struct {
+	Usage         ExtractionUsage `json:"usage"`                   // Combined usage statistics
+	Model         string          `json:"model"`                   // Model used for extraction
+	Nodes         []Node          `json:"nodes,omitempty"`         // Extracted entities
+	Relationships []Relationship  `json:"relationships,omitempty"` // Extracted relationships
+}
+
+// ExtractionUsage represents usage statistics for extraction operations
+type ExtractionUsage struct {
+	TotalTokens  int `json:"total_tokens"`  // Total number of tokens processed
+	PromptTokens int `json:"prompt_tokens"` // Number of tokens in the input
+	TotalTexts   int `json:"total_texts"`   // Total number of texts processed
+}
+
 // ===== Graph Database Types =====
 
-// Node represents a graph node
+// Node represents a graph node extracted from text (corresponds to Neo4j Node)
 type Node struct {
 	ID         string                 `json:"id"`
-	Labels     []string               `json:"labels,omitempty"`     // Node labels/types
-	Properties map[string]interface{} `json:"properties,omitempty"` // Node properties
+	Name       string                 `json:"name"`                 // Entity name/title
+	Type       string                 `json:"type"`                 // Entity type (Person, Organization, Location, etc.)
+	Labels     []string               `json:"labels,omitempty"`     // Additional labels/categories
+	Properties map[string]interface{} `json:"properties,omitempty"` // Entity properties
+
+	// GraphRAG specific fields
+	Description     string    `json:"description,omitempty"`      // Entity description/summary
+	Confidence      float64   `json:"confidence,omitempty"`       // Extraction confidence score (0-1)
+	EmbeddingVector []float64 `json:"embedding_vector,omitempty"` // Entity embedding for semantic search
+
+	// Source tracking
+	SourceDocuments  []string         `json:"source_documents,omitempty"`  // Document IDs where entity was found
+	SourceChunks     []string         `json:"source_chunks,omitempty"`     // Chunk IDs where entity was extracted
+	ExtractionMethod ExtractionMethod `json:"extraction_method,omitempty"` // Extraction method used
+
+	// Neo4j internal fields (populated when reading from database)
+	InternalID int64  `json:"internal_id,omitempty"` // Neo4j internal node ID
+	ElementID  string `json:"element_id,omitempty"`  // Neo4j element ID (Neo4j 5.0+)
+
+	// Timestamps
+	CreatedAt int64 `json:"created_at,omitempty"` // Unix timestamp when entity was created
+	UpdatedAt int64 `json:"updated_at,omitempty"` // Unix timestamp when entity was last updated
+
+	// Version control
+	Version int          `json:"version,omitempty"` // Node version number
+	Status  EntityStatus `json:"status,omitempty"`  // Node lifecycle status
 }
 
 // Relationship represents a graph relationship/edge
@@ -524,6 +1055,31 @@ type Relationship struct {
 	StartNode  string                 `json:"start_node"`           // Start node ID
 	EndNode    string                 `json:"end_node"`             // End node ID
 	Properties map[string]interface{} `json:"properties,omitempty"` // Relationship properties
+
+	// GraphRAG specific fields
+	Description     string    `json:"description,omitempty"`      // Relationship description
+	Confidence      float64   `json:"confidence,omitempty"`       // Extraction confidence score (0-1)
+	Weight          float64   `json:"weight,omitempty"`           // Relationship strength/weight
+	EmbeddingVector []float64 `json:"embedding_vector,omitempty"` // Relationship embedding
+
+	// Source tracking
+	SourceDocuments  []string         `json:"source_documents,omitempty"`  // Document IDs where relationship was found
+	SourceChunks     []string         `json:"source_chunks,omitempty"`     // Chunk IDs where relationship was extracted
+	ExtractionMethod ExtractionMethod `json:"extraction_method,omitempty"` // Extraction method used
+
+	// Neo4j internal fields (populated when reading from database)
+	InternalID  int64  `json:"internal_id,omitempty"`   // Neo4j internal relationship ID
+	ElementID   string `json:"element_id,omitempty"`    // Neo4j element ID (Neo4j 5.0+)
+	StartNodeID int64  `json:"start_node_id,omitempty"` // Neo4j internal start node ID
+	EndNodeID   int64  `json:"end_node_id,omitempty"`   // Neo4j internal end node ID
+
+	// Timestamps
+	CreatedAt int64 `json:"created_at,omitempty"` // Unix timestamp when relationship was created
+	UpdatedAt int64 `json:"updated_at,omitempty"` // Unix timestamp when relationship was last updated
+
+	// Version control
+	Version int          `json:"version,omitempty"` // Relationship version number
+	Status  EntityStatus `json:"status,omitempty"`  // Relationship lifecycle status
 }
 
 // Path represents a graph path
@@ -635,9 +1191,9 @@ type GraphOperation struct {
 
 // Config represents configuration for GraphRAG
 type Config struct {
-	GraphStore        GraphStore        `json:"graph_store"`
-	VectorStore       VectorStore       `json:"vector_store"`
-	EmbeddingFunction EmbeddingFunction `json:"embedding_function"`
+	GraphStore  GraphStore  `json:"graph_store"`
+	VectorStore VectorStore `json:"vector_store"`
+	Embedding   Embedding   `json:"embedding_function"`
 
 	// Community detection settings
 	CommunityDetection CommunityDetectionOptions `json:"community_detection"`
@@ -661,7 +1217,6 @@ type VoteOption struct {
 
 // RestoreOptions represents options for restoring data
 type RestoreOptions struct {
-	BackupPath     string                 `json:"backup_path"`
 	CollectionName string                 `json:"collection_name"`
 	Force          bool                   `json:"force"`
 	ExtraParams    map[string]interface{} `json:"extra_params,omitempty"`
@@ -725,7 +1280,6 @@ func (ls LoadState) String() string {
 // BackupOptions represents options for creating backups
 type BackupOptions struct {
 	CollectionName string                 `json:"collection_name"`
-	BackupPath     string                 `json:"backup_path"`
 	Compress       bool                   `json:"compress"`
 	ExtraParams    map[string]interface{} `json:"extra_params,omitempty"`
 }
@@ -770,130 +1324,10 @@ type ScrollResult struct {
 	HasMore   bool        `json:"has_more"`            // Whether there are more results
 }
 
-// ===== Paginated Search Types (for Search Engine scenarios) =====
-
-// PaginatedSearchOptions represents options for paginated similarity search
-type PaginatedSearchOptions struct {
-	CollectionName string                 `json:"collection_name"`
-	QueryVector    []float64              `json:"query_vector"`     // Query vector for similarity search
-	Page           int                    `json:"page"`             // Page number (1-based)
-	PageSize       int                    `json:"page_size"`        // Number of results per page (default: 10)
-	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
-
-	// Search-specific parameters
-	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter (HNSW)
-	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes (IVF)
-	Rescore     bool `json:"rescore,omitempty"`     // Whether to rescore results
-	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
-	Timeout     int  `json:"timeout,omitempty"`     // Search timeout in milliseconds
-
-	// Search engine specific options
-	MinScore        float64  `json:"min_score,omitempty"`        // Minimum similarity score to include
-	MaxResults      int      `json:"max_results,omitempty"`      // Maximum total results to consider (default: 1000)
-	SortBy          []string `json:"sort_by,omitempty"`          // Secondary sorting criteria
-	IncludeTotal    bool     `json:"include_total"`              // Whether to calculate total count (expensive)
-	FacetFields     []string `json:"facet_fields,omitempty"`     // Fields for faceted search
-	HighlightFields []string `json:"highlight_fields,omitempty"` // Fields to highlight in results
-}
-
-// PaginatedMMRSearchOptions represents options for paginated MMR search
-type PaginatedMMRSearchOptions struct {
-	CollectionName string                 `json:"collection_name"`
-	QueryVector    []float64              `json:"query_vector"`          // Query vector for similarity search
-	Page           int                    `json:"page"`                  // Page number (1-based)
-	PageSize       int                    `json:"page_size"`             // Number of results per page (default: 10)
-	FetchK         int                    `json:"fetch_k,omitempty"`     // Number of documents to fetch for MMR algorithm
-	LambdaMult     float64                `json:"lambda_mult,omitempty"` // Diversity parameter (0-1)
-	Filter         map[string]interface{} `json:"filter,omitempty"`      // Metadata filter
-
-	// Search parameters
-	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
-	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
-	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
-
-	// Search engine specific options
-	MinScore     float64  `json:"min_score,omitempty"`    // Minimum similarity score to include
-	MaxResults   int      `json:"max_results,omitempty"`  // Maximum total results to consider
-	IncludeTotal bool     `json:"include_total"`          // Whether to calculate total count
-	FacetFields  []string `json:"facet_fields,omitempty"` // Fields for faceted search
-}
-
-// PaginatedScoreThresholdSearchOptions represents options for paginated score threshold search
-type PaginatedScoreThresholdSearchOptions struct {
-	CollectionName string                 `json:"collection_name"`
-	QueryVector    []float64              `json:"query_vector"`     // Query vector for similarity search
-	ScoreThreshold float64                `json:"score_threshold"`  // Minimum relevance score threshold
-	Page           int                    `json:"page"`             // Page number (1-based)
-	PageSize       int                    `json:"page_size"`        // Number of results per page (default: 10)
-	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
-
-	// Search parameters
-	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
-	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
-	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
-
-	// Search engine specific options
-	MaxResults   int      `json:"max_results,omitempty"`  // Maximum total results to consider
-	SortBy       []string `json:"sort_by,omitempty"`      // Secondary sorting criteria
-	IncludeTotal bool     `json:"include_total"`          // Whether to calculate total count
-	FacetFields  []string `json:"facet_fields,omitempty"` // Fields for faceted search
-}
-
 // SearchFacet represents a facet for faceted search
 type SearchFacet struct {
 	Field  string           `json:"field"`  // Metadata field name
 	Values map[string]int64 `json:"values"` // Value -> count mapping
-}
-
-// PaginatedSearchResult represents paginated search results
-type PaginatedSearchResult struct {
-	Documents    []*SearchResult `json:"documents"`               // Search results for current page
-	Page         int             `json:"page"`                    // Current page number
-	PageSize     int             `json:"page_size"`               // Number of results per page
-	Total        int64           `json:"total,omitempty"`         // Total number of matching documents (if IncludeTotal=true)
-	TotalPages   int             `json:"total_pages,omitempty"`   // Total number of pages (if IncludeTotal=true)
-	HasNext      bool            `json:"has_next"`                // Whether there are more pages
-	HasPrevious  bool            `json:"has_previous"`            // Whether there are previous pages
-	NextPage     int             `json:"next_page,omitempty"`     // Next page number (if HasNext=true)
-	PreviousPage int             `json:"previous_page,omitempty"` // Previous page number (if HasPrevious=true)
-
-	// Search engine features
-	QueryTime   int64                   `json:"query_time_ms"`         // Query execution time in milliseconds
-	Facets      map[string]*SearchFacet `json:"facets,omitempty"`      // Faceted search results
-	Suggestions []string                `json:"suggestions,omitempty"` // Query suggestions for typos/alternatives
-	MaxScore    float64                 `json:"max_score,omitempty"`   // Highest score in results
-	MinScore    float64                 `json:"min_score,omitempty"`   // Lowest score in results
-}
-
-// HybridSearchOptions represents options for hybrid (vector + keyword) search with pagination
-type HybridSearchOptions struct {
-	CollectionName string                 `json:"collection_name"`
-	QueryVector    []float64              `json:"query_vector"`     // Vector query
-	QueryText      string                 `json:"query_text"`       // Text query for keyword search
-	Page           int                    `json:"page"`             // Page number (1-based)
-	PageSize       int                    `json:"page_size"`        // Number of results per page
-	Filter         map[string]interface{} `json:"filter,omitempty"` // Metadata filter
-
-	// Hybrid search weights
-	VectorWeight  float64 `json:"vector_weight"`  // Weight for vector similarity (0-1)
-	KeywordWeight float64 `json:"keyword_weight"` // Weight for keyword relevance (0-1)
-
-	// Search parameters
-	EfSearch    int  `json:"ef_search,omitempty"`   // Dynamic search parameter
-	NumProbes   int  `json:"num_probes,omitempty"`  // Number of probes
-	Approximate bool `json:"approximate,omitempty"` // Whether to use approximate search
-
-	// Keyword search parameters
-	KeywordFields []string           `json:"keyword_fields,omitempty"` // Fields to search for keywords
-	FuzzyMatch    bool               `json:"fuzzy_match,omitempty"`    // Enable fuzzy keyword matching
-	BoostFields   map[string]float64 `json:"boost_fields,omitempty"`   // Field -> boost factor mapping
-
-	// Search engine specific options
-	MinScore        float64  `json:"min_score,omitempty"`        // Minimum combined score
-	MaxResults      int      `json:"max_results,omitempty"`      // Maximum total results to consider
-	IncludeTotal    bool     `json:"include_total"`              // Whether to calculate total count
-	FacetFields     []string `json:"facet_fields,omitempty"`     // Fields for faceted search
-	HighlightFields []string `json:"highlight_fields,omitempty"` // Fields to highlight in results
 }
 
 // SearchEngineStats represents search engine performance statistics
@@ -906,4 +1340,132 @@ type SearchEngineStats struct {
 	ErrorRate        float64  `json:"error_rate"`        // Error rate (0-1)
 	IndexSize        int64    `json:"index_size_bytes"`  // Total index size in bytes
 	DocumentCount    int64    `json:"document_count"`    // Total number of documents
+}
+
+// ===== Embedding Result Types =====
+
+// EmbeddingUsage represents usage statistics for embedding operations
+type EmbeddingUsage struct {
+	TotalTokens  int `json:"total_tokens"`  // Total number of tokens processed
+	PromptTokens int `json:"prompt_tokens"` // Number of tokens in the input
+	TotalTexts   int `json:"total_texts"`   // Total number of texts processed
+}
+
+// EmbeddingType represents the type of embedding
+type EmbeddingType string
+
+const (
+	// EmbeddingTypeDense represents dense vector embeddings
+	EmbeddingTypeDense EmbeddingType = "dense"
+
+	// EmbeddingTypeSparse represents sparse vector embeddings
+	EmbeddingTypeSparse EmbeddingType = "sparse"
+)
+
+// String returns the string representation of EmbeddingType
+func (et EmbeddingType) String() string {
+	return string(et)
+}
+
+// IsValid validates if the embedding type is supported
+func (et EmbeddingType) IsValid() bool {
+	switch et {
+	case EmbeddingTypeDense, EmbeddingTypeSparse:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetSupportedEmbeddingTypes returns all supported embedding types
+func GetSupportedEmbeddingTypes() []EmbeddingType {
+	return []EmbeddingType{
+		EmbeddingTypeDense,
+		EmbeddingTypeSparse,
+	}
+}
+
+// EmbeddingResult represents the result of a single embedding operation
+type EmbeddingResult struct {
+	Usage     EmbeddingUsage `json:"usage"`               // Usage statistics
+	Model     string         `json:"model"`               // Model used for embedding
+	Type      EmbeddingType  `json:"type"`                // Type of embedding (dense/sparse)
+	Embedding []float64      `json:"embedding,omitempty"` // Dense vector (for dense embeddings)
+	Indices   []uint32       `json:"indices,omitempty"`   // Sparse vector indices (for sparse embeddings)
+	Values    []float32      `json:"values,omitempty"`    // Sparse vector values (for sparse embeddings)
+}
+
+// IsDense returns true if this is a dense embedding
+func (er *EmbeddingResult) IsDense() bool {
+	return er.Type == EmbeddingTypeDense
+}
+
+// IsSparse returns true if this is a sparse embedding
+func (er *EmbeddingResult) IsSparse() bool {
+	return er.Type == EmbeddingTypeSparse
+}
+
+// GetDenseEmbedding returns the dense embedding vector
+func (er *EmbeddingResult) GetDenseEmbedding() []float64 {
+	if er.IsDense() {
+		return er.Embedding
+	}
+	return nil
+}
+
+// GetSparseEmbedding returns the sparse embedding indices and values
+func (er *EmbeddingResult) GetSparseEmbedding() ([]uint32, []float32) {
+	if er.IsSparse() {
+		return er.Indices, er.Values
+	}
+	return nil, nil
+}
+
+// EmbeddingResults represents the result of multiple embedding operations
+type EmbeddingResults struct {
+	Usage            EmbeddingUsage    `json:"usage"`                       // Combined usage statistics
+	Model            string            `json:"model"`                       // Model used for embedding
+	Type             EmbeddingType     `json:"type"`                        // Type of embedding (dense/sparse)
+	Embeddings       [][]float64       `json:"embeddings,omitempty"`        // Dense vectors (for dense embeddings)
+	SparseEmbeddings []SparseEmbedding `json:"sparse_embeddings,omitempty"` // Sparse vectors (for sparse embeddings)
+}
+
+// SparseEmbedding represents a single sparse embedding
+type SparseEmbedding struct {
+	Indices []uint32  `json:"indices"` // Non-zero indices
+	Values  []float32 `json:"values"`  // Non-zero values
+}
+
+// IsDense returns true if this contains dense embeddings
+func (ers *EmbeddingResults) IsDense() bool {
+	return ers.Type == EmbeddingTypeDense
+}
+
+// IsSparse returns true if this contains sparse embeddings
+func (ers *EmbeddingResults) IsSparse() bool {
+	return ers.Type == EmbeddingTypeSparse
+}
+
+// GetDenseEmbeddings returns all dense embedding vectors
+func (ers *EmbeddingResults) GetDenseEmbeddings() [][]float64 {
+	if ers.IsDense() {
+		return ers.Embeddings
+	}
+	return nil
+}
+
+// GetSparseEmbeddings returns all sparse embeddings
+func (ers *EmbeddingResults) GetSparseEmbeddings() []SparseEmbedding {
+	if ers.IsSparse() {
+		return ers.SparseEmbeddings
+	}
+	return nil
+}
+
+// Count returns the number of embeddings
+func (ers *EmbeddingResults) Count() int {
+	if ers.IsDense() {
+		return len(ers.Embeddings)
+	}
+	return len(ers.SparseEmbeddings)
 }

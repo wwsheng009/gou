@@ -2,27 +2,18 @@ package chunking
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kaptinlin/jsonrepair"
 	"github.com/yaoapp/gou/connector"
 	"github.com/yaoapp/gou/graphrag/types"
 	"github.com/yaoapp/gou/graphrag/utils"
 	"github.com/yaoapp/kun/log"
 )
-
-// SemanticPosition represents the semantic segment position returned by LLM
-type SemanticPosition struct {
-	StartPos int `json:"start_pos"`
-	EndPos   int `json:"end_pos"`
-}
 
 // ProgressCallback represents the progress callback function
 type ProgressCallback func(chunkID string, progress string, step string, data interface{}) error
@@ -83,8 +74,8 @@ func (sc *SemanticChunker) ChunkStream(ctx context.Context, stream io.ReadSeeker
 		return fmt.Errorf("no structured chunks generated")
 	}
 
-	// Step 3: Process semantic chunking with concurrency
-	semanticChunks, err := sc.processSemanticChunking(ctx, structuredChunks, options)
+	// Step 3: Process semantic chunking
+	semanticChunks, err := sc.processSemanticChunks(ctx, structuredChunks, options)
 	if err != nil {
 		return fmt.Errorf("failed to process semantic chunking: %w", err)
 	}
@@ -156,13 +147,26 @@ func (sc *SemanticChunker) getStructuredChunks(ctx context.Context, stream io.Re
 		MaxConcurrent: options.MaxConcurrent,
 	}
 
-	var chunks []*types.Chunk
+	// Use a map to preserve order based on chunk index
+	chunksMap := make(map[int]*types.Chunk)
 	var mu sync.Mutex
+	var maxIndex int
 
 	err := sc.structuredChunker.ChunkStream(ctx, stream, structuredOpts, func(chunk *types.Chunk) error {
 		mu.Lock()
 		defer mu.Unlock()
-		chunks = append(chunks, chunk)
+		chunksMap[chunk.Index] = chunk
+		if chunk.Index > maxIndex {
+			maxIndex = chunk.Index
+		}
+
+		// Report progress for each structured chunk
+		sc.reportProgress(chunk.ID, "completed", "structured_chunk", map[string]interface{}{
+			"chunk_index": chunk.Index,
+			"chunk_size":  len(chunk.Text),
+			"chunk_text":  chunk.Text,
+		})
+
 		return nil
 	})
 
@@ -170,19 +174,28 @@ func (sc *SemanticChunker) getStructuredChunks(ctx context.Context, stream io.Re
 		return nil, err
 	}
 
+	// Rebuild ordered slice from map
+	chunks := make([]*types.Chunk, 0, len(chunksMap))
+	for i := 0; i <= maxIndex; i++ {
+		if chunk, exists := chunksMap[i]; exists {
+			chunks = append(chunks, chunk)
+		}
+	}
+
 	return chunks, nil
 }
 
-// processSemanticChunking processes semantic chunking with LLM concurrency
-func (sc *SemanticChunker) processSemanticChunking(ctx context.Context, structuredChunks []*types.Chunk, options *types.ChunkingOptions) ([]*types.Chunk, error) {
+// processSemanticChunks processes structured chunks and merges results in correct order
+func (sc *SemanticChunker) processSemanticChunks(ctx context.Context, structuredChunks []*types.Chunk, options *types.ChunkingOptions) ([]*types.Chunk, error) {
 	semanticOpts := options.SemanticOptions
 
 	// Channel for controlling concurrency
 	semaphore := make(chan struct{}, semanticOpts.MaxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var allSemanticChunks []*types.Chunk
-	var firstError error
+
+	// Use a map to store results with original index to preserve order
+	semanticChunksByIndex := make(map[int][]*types.Chunk)
 
 	for i, structuredChunk := range structuredChunks {
 		// Check context cancellation
@@ -195,7 +208,7 @@ func (sc *SemanticChunker) processSemanticChunking(ctx context.Context, structur
 		wg.Add(1)
 		semaphore <- struct{}{} // Acquire semaphore
 
-		go func(chunk *types.Chunk, index int) {
+		go func(chunk *types.Chunk, originalIndex int) {
 			defer func() {
 				<-semaphore // Release semaphore
 				wg.Done()
@@ -203,45 +216,96 @@ func (sc *SemanticChunker) processSemanticChunking(ctx context.Context, structur
 
 			// Report progress
 			sc.reportProgress(chunk.ID, "processing", "semantic_analysis", map[string]interface{}{
-				"chunk_index":  index,
+				"chunk_index":  originalIndex,
 				"total_chunks": len(structuredChunks),
 			})
 
 			// Process semantic segmentation for this chunk
 			semanticChunks, err := sc.processChunkSemanticSegmentation(ctx, chunk, options)
-			if err != nil {
-				mu.Lock()
-				if firstError == nil {
-					firstError = fmt.Errorf("failed to process chunk %s: %w", chunk.ID, err)
-				}
-				mu.Unlock()
+			var processedChunks []*types.Chunk
 
-				// Report error progress
-				sc.reportProgress(chunk.ID, "failed", "semantic_analysis", map[string]interface{}{
-					"error": err.Error(),
+			if err != nil {
+				// Log the error but don't fail the entire process
+				log.Warn("Failed to process semantic segmentation for chunk %s after retries: %v", chunk.ID, err)
+
+				// Create a fallback semantic chunk from the original structured chunk
+				// This ensures we don't lose any content
+				fallbackChunk := &types.Chunk{
+					ID:       chunk.ID + "_fallback", // Unique ID for fallback
+					Text:     chunk.Text,
+					Type:     chunk.Type,
+					ParentID: chunk.ParentID,
+					Depth:    options.MaxDepth, // Set to MaxDepth like other semantic chunks
+					Leaf:     true,
+					Root:     options.MaxDepth == 1,
+					Index:    0, // Will be updated later
+					Status:   types.ChunkingStatusCompleted,
+					TextPos:  chunk.TextPos,
+					Parents:  chunk.Parents,
+				}
+				processedChunks = []*types.Chunk{fallbackChunk}
+
+				// Report warning progress instead of failure
+				sc.reportProgress(chunk.ID, "warning", "semantic_analysis", map[string]interface{}{
+					"error":  err.Error(),
+					"action": "using_fallback_chunk",
 				})
-				return
+			} else {
+				// Update indices and store results in order
+				processedChunks = sc.updateSemanticChunkIndices(semanticChunks, originalIndex)
 			}
 
-			// Add to results
+			// Store results with original index to preserve order
 			mu.Lock()
-			allSemanticChunks = append(allSemanticChunks, semanticChunks...)
+			semanticChunksByIndex[originalIndex] = processedChunks
 			mu.Unlock()
 
 			// Report completion progress
 			sc.reportProgress(chunk.ID, "completed", "semantic_analysis", map[string]interface{}{
-				"chunks_generated": len(semanticChunks),
+				"chunks_generated": len(processedChunks),
 			})
 		}(structuredChunk, i)
 	}
 
 	wg.Wait()
 
-	if firstError != nil {
-		return nil, firstError
+	// We no longer fail the entire process if some chunks failed
+	// Instead, we use fallback chunks and continue processing
+	// Only fail if no chunks were processed at all
+	if len(semanticChunksByIndex) == 0 {
+		return nil, fmt.Errorf("no chunks were processed")
 	}
 
-	return allSemanticChunks, nil
+	// Merge and finalize results
+	return sc.mergeSemanticChunksInOrder(semanticChunksByIndex, len(structuredChunks)), nil
+}
+
+// updateSemanticChunkIndices updates the indices of semantic chunks based on original structured chunk order
+func (sc *SemanticChunker) updateSemanticChunkIndices(semanticChunks []*types.Chunk, originalIndex int) []*types.Chunk {
+	// Set temporary indices within this chunk group, will be overridden in mergeSemanticChunksInOrder
+	for j, semanticChunk := range semanticChunks {
+		semanticChunk.Index = j // Temporary index within this group: 0, 1, 2, ...
+	}
+	return semanticChunks
+}
+
+// mergeSemanticChunksInOrder merges semantic chunks in the correct order based on original structured chunk order
+func (sc *SemanticChunker) mergeSemanticChunksInOrder(semanticChunksByIndex map[int][]*types.Chunk, totalStructuredChunks int) []*types.Chunk {
+	// Merge results in the correct order based on original structured chunk order
+	var allSemanticChunks []*types.Chunk
+	for i := 0; i < totalStructuredChunks; i++ {
+		if chunks, exists := semanticChunksByIndex[i]; exists {
+			allSemanticChunks = append(allSemanticChunks, chunks...)
+		}
+	}
+
+	// Update indices within MaxDepth level to be sequential 0-N
+	// The hierarchy building will set appropriate indices for each level independently
+	for i, chunk := range allSemanticChunks {
+		chunk.Index = i // Sequential index within MaxDepth level: 0, 1, 2, 3, ...
+	}
+
+	return allSemanticChunks
 }
 
 // processChunkSemanticSegmentation processes semantic segmentation for a single chunk
@@ -249,12 +313,13 @@ func (sc *SemanticChunker) processChunkSemanticSegmentation(ctx context.Context,
 	semanticOpts := options.SemanticOptions
 
 	// Try with retries
-	var positions []SemanticPosition
+	var positions []types.Position
+	var chars []string
 	var err error
 
 	for retry := 0; retry <= semanticOpts.MaxRetry; retry++ {
 		// Use options.Size as the target size for semantic segmentation
-		positions, err = sc.callLLMForSegmentation(ctx, chunk.Text, semanticOpts, options.Size)
+		chars, positions, err = sc.callLLMForSegmentation(ctx, chunk, semanticOpts, options.Size)
 		if err == nil && len(positions) > 0 {
 			break
 		}
@@ -271,35 +336,48 @@ func (sc *SemanticChunker) processChunkSemanticSegmentation(ctx context.Context,
 
 	if len(positions) == 0 {
 		// If no positions returned, treat entire chunk as single semantic unit
-		positions = []SemanticPosition{{StartPos: 0, EndPos: len(chunk.Text)}}
+		positions = []types.Position{{StartPos: 0, EndPos: len(chunk.Text)}}
 	}
 
-	// Convert positions to chunks
-	semanticChunks := sc.createSemanticChunks(chunk, positions, options)
+	// Convert positions to chunks using generic Split method
+	semanticChunks := chunk.Split(chars, positions)
+
+	// Override depth and other properties for semantic chunks (LLM produces MaxDepth level chunks)
+	for i, semanticChunk := range semanticChunks {
+		semanticChunk.Depth = options.MaxDepth // LLM segmentation produces minimum granularity (MaxDepth)
+		semanticChunk.Index = i                // Index within this semantic split: 0, 1, 2, ...
+		semanticChunk.Root = false             // Semantic chunks are not root
+		semanticChunk.Leaf = true              // At MaxDepth, these are leaf nodes
+	}
+
 	return semanticChunks, nil
 }
 
 // callLLMForSegmentation calls LLM to get semantic segmentation positions using streaming
-func (sc *SemanticChunker) callLLMForSegmentation(ctx context.Context, text string, semanticOpts *types.SemanticOptions, maxSize int) ([]SemanticPosition, error) {
+func (sc *SemanticChunker) callLLMForSegmentation(ctx context.Context, chunk *types.Chunk, semanticOpts *types.SemanticOptions, maxSize int) ([]string, []types.Position, error) {
 	// Get the connector
 	conn, err := connector.Select(semanticOpts.Connector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to select connector '%s': %w", semanticOpts.Connector, err)
+		return nil, nil, fmt.Errorf("failed to select connector '%s': %w", semanticOpts.Connector, err)
 	}
 
 	// Build prompt using utils function with size information
-	basePrompt := utils.GetSemanticPrompt(semanticOpts.Prompt)
-	prompt := fmt.Sprintf("%s\n\nIMPORTANT: Do NOT create segments with regular intervals or fixed character counts. The suggested size of %d characters is only a rough guideline - ALWAYS prioritize natural semantic boundaries over size uniformity. Segments should vary significantly in size based on content structure.\n\nText to segment:\n%s", basePrompt, maxSize, text)
+	prompt := utils.SemanticPrompt(semanticOpts.Prompt, maxSize)
+	// prompt = prompt + "\n\n# Text to segment:\n```text\n" + chunk.Text + "\n```"
+
+	chars := chunk.TextWChars()
+	charsJSON := ""
+	for idx, char := range chars {
+		charsJSON += fmt.Sprintf("%d: %s\n", idx, char)
+	}
 
 	// Prepare request payload
 	requestData := map[string]interface{}{
-		"max_tokens":  4000,
-		"temperature": 0.1,
+		"temperature": 0,             // Slightly higher temperature for more semantic awareness
+		"model":       "gpt-4o-mini", // Use more capable model for better semantic understanding
 		"messages": []map[string]interface{}{
-			{
-				"role":    "user",
-				"content": prompt,
-			},
+			{"role": "system", "content": prompt},
+			{"role": "user", "content": charsJSON},
 		},
 	}
 
@@ -307,8 +385,6 @@ func (sc *SemanticChunker) callLLMForSegmentation(ctx context.Context, text stri
 	setting := conn.Setting()
 	if model, ok := setting["model"].(string); ok && model != "" {
 		requestData["model"] = model
-	} else {
-		requestData["model"] = "gpt-4o-mini" // Default model
 	}
 
 	// Add custom options if provided
@@ -325,44 +401,17 @@ func (sc *SemanticChunker) callLLMForSegmentation(ctx context.Context, text stri
 
 	// Use toolcall if enabled
 	if semanticOpts.Toolcall {
-		requestData["tools"] = []map[string]interface{}{
-			{
-				"type": "function",
-				"function": map[string]interface{}{
-					"name":        "segment_text",
-					"description": "Segment text into semantic chunks based on natural boundaries, NOT fixed character intervals. Prioritize topic changes, paragraph breaks, and concept shifts over uniform sizing.",
-					"parameters": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"segments": map[string]interface{}{
-								"type":        "array",
-								"description": "Array of semantic segments with VARIED sizes based on natural content boundaries",
-								"items": map[string]interface{}{
-									"type": "object",
-									"properties": map[string]interface{}{
-										"start_pos": map[string]interface{}{
-											"type":        "integer",
-											"description": "Start character position of the semantic segment",
-										},
-										"end_pos": map[string]interface{}{
-											"type":        "integer",
-											"description": "End character position of the semantic segment",
-										},
-									},
-									"required": []string{"start_pos", "end_pos"},
-								},
-							},
-						},
-						"required": []string{"segments"},
-					},
-				},
+		requestData["tools"] = utils.SemanticToolcall
+		requestData["tool_choice"] = map[string]interface{}{
+			"type": "function",
+			"function": map[string]interface{}{
+				"name": "segment_text",
 			},
 		}
-		requestData["tool_choice"] = "auto"
 	}
 
 	// Create stream parser
-	parser := utils.NewStreamParser(semanticOpts.Toolcall)
+	parser := utils.NewSemanticParser(semanticOpts.Toolcall)
 	var finalContent string
 	var finalArguments string
 
@@ -374,457 +423,64 @@ func (sc *SemanticChunker) callLLMForSegmentation(ctx context.Context, text stri
 		}
 
 		// Parse streaming chunk
-		chunkData, err := parser.ParseStreamChunk(data)
+		positions, err := parser.ParseSemanticPositions(data)
 		if err != nil {
 			log.Warn("Failed to parse stream chunk: %v", err)
 			return nil // Don't fail the entire stream for parsing errors
 		}
 
-		fmt.Println("--------------------------------")
-		fmt.Println("Streaming data", string(data))
-		fmt.Println("Streaming chunk arguments", chunkData.Arguments)
-		fmt.Println("Streaming chunk content", chunkData.Content)
-		fmt.Println("Streaming chunk finished", chunkData.Finished)
-		fmt.Println("Streaming chunk error", chunkData.Error)
-		fmt.Println("Streaming chunk positions count", len(chunkData.Positions))
-		if len(chunkData.Positions) > 0 {
-			maxShow := 3
-			if len(chunkData.Positions) < maxShow {
-				maxShow = len(chunkData.Positions)
-			}
-			fmt.Printf("First few positions: %+v\n", chunkData.Positions[:maxShow])
+		// Ignore nil positions
+		if positions == nil {
+			return nil
 		}
-		fmt.Println("--------------------------------")
 
-		// Update final content/arguments
-		if semanticOpts.Toolcall {
-			finalArguments = chunkData.Arguments
-		} else {
-			finalContent = chunkData.Content
+		// Validate positions
+		err = types.ValidatePositions(chars, positions)
+		if err != nil {
+			log.Warn("Invalid positions: %v", err)
+			return err
 		}
 
 		// Report progress with streaming data including positions
-		sc.reportProgress("", "streaming", "llm_response", map[string]interface{}{
-			"is_toolcall":      chunkData.IsToolcall,
-			"content_length":   len(chunkData.Content),
-			"arguments_length": len(chunkData.Arguments),
-			"positions_count":  len(chunkData.Positions),
-			"finished":         chunkData.Finished,
-			"has_error":        chunkData.Error != "",
-		})
-
-		// If we have positions and the stream is finished, we can potentially return early
-		if chunkData.Finished && len(chunkData.Positions) > 0 {
-			log.Debug("Stream finished with %d positions parsed", len(chunkData.Positions))
-		}
-
+		sc.reportProgress(chunk.ID, "streaming", "llm_response", positions)
 		return nil
 	}
 
 	// Make streaming request using utils.StreamLLM
 	err = utils.StreamLLM(ctx, conn, "chat/completions", requestData, streamCallback)
 	if err != nil {
-		return nil, fmt.Errorf("LLM streaming request failed: %w", err)
+		return nil, nil, fmt.Errorf("LLM streaming request failed: %w", err)
 	}
 
-	// Build response data for parsing
-	var responseData map[string]interface{}
+	// Extract final results from parser
 	if semanticOpts.Toolcall {
-		// For toolcall, check if finalArguments is complete and valid
-		if strings.TrimSpace(finalArguments) == "" {
-			log.Warn("Empty finalArguments received from streaming, using fallback")
-			// Use fallback: create a single segment for the entire text
-			return []SemanticPosition{{StartPos: 0, EndPos: len(text)}}, nil
-		}
-
-		// Try to repair incomplete JSON arguments
-		repairedArgs, err := jsonrepair.JSONRepair(finalArguments)
+		finalArguments = parser.Arguments
+		positions, err := parser.ParseSemanticToolcall(finalArguments)
 		if err != nil {
-			log.Warn("Failed to repair finalArguments JSON: %v, using fallback", err)
-			// Use fallback: create a single segment for the entire text, but apply size constraints
-			fallbackPos := []SemanticPosition{{StartPos: 0, EndPos: len(text)}}
-			return sc.validateAndFixPositions(fallbackPos, len(text), maxSize), nil
+			return nil, nil, fmt.Errorf("failed to parse toolcall: %w", err)
 		}
-
-		// Validate that repaired JSON can be parsed
-		var testArgs map[string]interface{}
-		if err := json.Unmarshal([]byte(repairedArgs), &testArgs); err != nil {
-			log.Warn("Repaired finalArguments is still invalid: %v, using fallback", err)
-			// Use fallback: create a single segment for the entire text
-			return []SemanticPosition{{StartPos: 0, EndPos: len(text)}}, nil
-		}
-
-		// For toolcall, create a mock response structure with the repaired arguments
-		responseData = map[string]interface{}{
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
-						"tool_calls": []interface{}{
-							map[string]interface{}{
-								"function": map[string]interface{}{
-									"arguments": repairedArgs,
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-	} else {
-		// For regular response, check if finalContent is available
-		if strings.TrimSpace(finalContent) == "" {
-			log.Warn("Empty finalContent received from streaming, using fallback")
-			// Use fallback: create a single segment for the entire text
-			return []SemanticPosition{{StartPos: 0, EndPos: len(text)}}, nil
-		}
-
-		// For regular response, create a mock response structure with the accumulated content
-		responseData = map[string]interface{}{
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
-						"content": finalContent,
-					},
-				},
-			},
-		}
+		return chars, positions, nil
 	}
 
-	// Convert response data to JSON bytes for existing parsing logic
-	responseBytes, err := json.Marshal(responseData)
+	finalContent = parser.Content
+	positions, err := parser.ParseSemanticRegular(finalContent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal response data: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse regular: %w", err)
 	}
-
-	// Parse response using existing logic
-	return sc.parseLLMResponse(responseBytes, semanticOpts.Toolcall, len(text), maxSize)
-}
-
-// parseLLMResponse parses LLM response to extract semantic positions
-func (sc *SemanticChunker) parseLLMResponse(responseBody []byte, isToolcall bool, textLen, maxSize int) ([]SemanticPosition, error) {
-	// First try to repair JSON if needed
-	repairedJSON, err := jsonrepair.JSONRepair(string(responseBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to repair JSON: %w", err)
-	}
-
-	var responseData map[string]interface{}
-	if err := json.Unmarshal([]byte(repairedJSON), &responseData); err != nil {
-		return nil, fmt.Errorf("failed to parse response JSON: %w", err)
-	}
-
-	var positions []SemanticPosition
-
-	if isToolcall {
-		// Parse toolcall response
-		positions, err = sc.parseToolcallResponse(responseData)
-	} else {
-		// Parse regular response
-		positions, err = sc.parseRegularResponse(responseData)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Only do basic boundary checks to prevent crashes, no semantic logic
-	var safePositions []SemanticPosition
-	for _, pos := range positions {
-		// Basic boundary safety checks only
-		if pos.StartPos < 0 {
-			pos.StartPos = 0
-		}
-		if pos.EndPos > textLen {
-			pos.EndPos = textLen
-		}
-		if pos.StartPos >= pos.EndPos {
-			continue // Skip invalid positions
-		}
-		safePositions = append(safePositions, pos)
-	}
-
-	return safePositions, nil
-}
-
-// parseToolcallResponse parses toolcall response format
-func (sc *SemanticChunker) parseToolcallResponse(responseData map[string]interface{}) ([]SemanticPosition, error) {
-	choices, ok := responseData["choices"].([]interface{})
-	if !ok || len(choices) == 0 {
-		return nil, fmt.Errorf("no choices in toolcall response")
-	}
-
-	choice := choices[0].(map[string]interface{})
-	message, ok := choice["message"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("no message in toolcall choice")
-	}
-
-	toolCalls, ok := message["tool_calls"].([]interface{})
-	if !ok || len(toolCalls) == 0 {
-		return nil, fmt.Errorf("no tool_calls in message")
-	}
-
-	toolCall := toolCalls[0].(map[string]interface{})
-	function, ok := toolCall["function"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("no function in tool_call")
-	}
-
-	argumentsStr, ok := function["arguments"].(string)
-	if !ok {
-		return nil, fmt.Errorf("no arguments in function")
-	}
-
-	var args map[string]interface{}
-	if err := json.Unmarshal([]byte(argumentsStr), &args); err != nil {
-		return nil, fmt.Errorf("failed to parse function arguments: %w", err)
-	}
-
-	segments, ok := args["segments"].([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("no segments in function arguments")
-	}
-
-	var positions []SemanticPosition
-	for _, seg := range segments {
-		segMap := seg.(map[string]interface{})
-
-		// Safe conversion for start_pos
-		startPos, err := sc.convertToInt(segMap["start_pos"])
-		if err != nil {
-			return nil, fmt.Errorf("invalid start_pos: %w", err)
-		}
-
-		// Safe conversion for end_pos
-		endPos, err := sc.convertToInt(segMap["end_pos"])
-		if err != nil {
-			return nil, fmt.Errorf("invalid end_pos: %w", err)
-		}
-
-		positions = append(positions, SemanticPosition{
-			StartPos: startPos,
-			EndPos:   endPos,
-		})
-	}
-
-	return positions, nil
-}
-
-// convertToInt safely converts interface{} to int, handling different number types
-func (sc *SemanticChunker) convertToInt(value interface{}) (int, error) {
-	if value == nil {
-		return 0, fmt.Errorf("value is nil")
-	}
-
-	switch v := value.(type) {
-	case int:
-		return v, nil
-	case int32:
-		return int(v), nil
-	case int64:
-		return int(v), nil
-	case float32:
-		return int(v), nil
-	case float64:
-		return int(v), nil
-	case string:
-		// Try to parse string as number
-		if parsed, err := strconv.Atoi(v); err == nil {
-			return parsed, nil
-		}
-		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			return int(parsed), nil
-		}
-		return 0, fmt.Errorf("cannot convert string '%s' to int", v)
-	default:
-		return 0, fmt.Errorf("unsupported type: %T", v)
-	}
-}
-
-// parseRegularResponse parses regular JSON response format
-func (sc *SemanticChunker) parseRegularResponse(responseData map[string]interface{}) ([]SemanticPosition, error) {
-	choices, ok := responseData["choices"].([]interface{})
-	if !ok || len(choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
-	}
-
-	choice := choices[0].(map[string]interface{})
-	message, ok := choice["message"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("no message in choice")
-	}
-
-	content, ok := message["content"].(string)
-	if !ok {
-		return nil, fmt.Errorf("no content in message")
-	}
-
-	// Check if content is empty or whitespace only
-	if strings.TrimSpace(content) == "" {
-		return []SemanticPosition{}, nil // Return empty positions for empty content
-	}
-
-	// Try to extract JSON from content (might be wrapped in markdown or have other text)
-	jsonStr := sc.extractJSONFromText(content)
-
-	// Check if extracted JSON is empty
-	if strings.TrimSpace(jsonStr) == "" {
-		return []SemanticPosition{}, nil // Return empty positions for empty JSON
-	}
-
-	// Repair and parse JSON
-	repairedJSON, err := jsonrepair.JSONRepair(jsonStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to repair extracted JSON: %w", err)
-	}
-
-	var positions []SemanticPosition
-	if err := json.Unmarshal([]byte(repairedJSON), &positions); err != nil {
-		return nil, fmt.Errorf("failed to parse positions JSON: %w", err)
-	}
-
-	return positions, nil
-}
-
-// extractJSONFromText extracts JSON array from text content
-func (sc *SemanticChunker) extractJSONFromText(text string) string {
-	// Remove markdown code blocks
-	text = strings.ReplaceAll(text, "```json", "")
-	text = strings.ReplaceAll(text, "```", "")
-
-	// Find JSON array boundaries
-	start := strings.Index(text, "[")
-	end := strings.LastIndex(text, "]")
-
-	if start == -1 || end == -1 || start >= end {
-		return text // Return as-is if no clear JSON boundaries
-	}
-
-	return text[start : end+1]
-}
-
-// validateAndFixPositions validates and fixes semantic positions
-func (sc *SemanticChunker) validateAndFixPositions(positions []SemanticPosition, textLen, maxSize int) []SemanticPosition {
-	if len(positions) == 0 {
-		// If no positions provided, create a single segment for the entire text
-		// This preserves the original content as one semantic unit
-		log.Warn("No semantic positions provided, creating single segment for entire text (length: %d)", textLen)
-		return []SemanticPosition{{StartPos: 0, EndPos: textLen}}
-	}
-
-	var validPositions []SemanticPosition
-	lastEnd := 0
-
-	for _, pos := range positions {
-		// Only fix obvious boundary errors, don't change semantic decisions
-		if pos.StartPos < 0 {
-			pos.StartPos = 0
-		}
-		if pos.EndPos > textLen {
-			pos.EndPos = textLen
-		}
-		if pos.StartPos >= pos.EndPos {
-			continue // Skip invalid positions
-		}
-
-		// Fill gaps between segments (preserve LLM's semantic boundaries)
-		if pos.StartPos > lastEnd {
-			validPositions = append(validPositions, SemanticPosition{
-				StartPos: lastEnd,
-				EndPos:   pos.StartPos,
-			})
-		}
-
-		// TRUST LLM COMPLETELY - use the segment as-is regardless of size
-		// The LLM has made semantic decisions that we should respect
-		validPositions = append(validPositions, pos)
-		lastEnd = pos.EndPos
-	}
-
-	// Fill remaining gap if any
-	if lastEnd < textLen {
-		validPositions = append(validPositions, SemanticPosition{
-			StartPos: lastEnd,
-			EndPos:   textLen,
-		})
-	}
-
-	return validPositions
-}
-
-// splitLargePosition splits a large position into smaller ones (legacy method)
-func (sc *SemanticChunker) splitLargePosition(pos SemanticPosition, maxSize int) []SemanticPosition {
-	return sc.splitLargePositionSemantically(pos, maxSize)
-}
-
-// splitLargePositionSemantically splits a large position while trying to preserve semantic boundaries
-func (sc *SemanticChunker) splitLargePositionSemantically(pos SemanticPosition, maxSize int) []SemanticPosition {
-	var positions []SemanticPosition
-	currentStart := pos.StartPos
-
-	for currentStart < pos.EndPos {
-		currentEnd := currentStart + maxSize
-		if currentEnd > pos.EndPos {
-			currentEnd = pos.EndPos
-		}
-
-		positions = append(positions, SemanticPosition{
-			StartPos: currentStart,
-			EndPos:   currentEnd,
-		})
-
-		currentStart = currentEnd
-	}
-
-	return positions
-}
-
-// createSemanticChunks creates semantic chunks from positions
-func (sc *SemanticChunker) createSemanticChunks(originalChunk *types.Chunk, positions []SemanticPosition, options *types.ChunkingOptions) []*types.Chunk {
-	var semanticChunks []*types.Chunk
-
-	for i, pos := range positions {
-		// Extract text for this semantic segment
-		chunkText := originalChunk.Text[pos.StartPos:pos.EndPos]
-		if strings.TrimSpace(chunkText) == "" {
-			continue // Skip empty chunks
-		}
-
-		// Calculate text position
-		var textPos *types.TextPosition
-		if originalChunk.TextPos != nil {
-			textPos = &types.TextPosition{
-				StartIndex: originalChunk.TextPos.StartIndex + pos.StartPos,
-				EndIndex:   originalChunk.TextPos.StartIndex + pos.EndPos,
-				StartLine:  originalChunk.TextPos.StartLine + strings.Count(originalChunk.Text[:pos.StartPos], "\n"),
-				EndLine:    originalChunk.TextPos.StartLine + strings.Count(originalChunk.Text[:pos.EndPos], "\n"),
-			}
-		}
-
-		// Create semantic chunk
-		chunk := &types.Chunk{
-			ID:       uuid.NewString(),
-			Text:     chunkText,
-			Type:     originalChunk.Type,
-			ParentID: "",    // Will be set during hierarchy building
-			Depth:    1,     // Semantic chunks start at depth 1
-			Leaf:     false, // Will be determined during hierarchy building
-			Root:     true,  // Semantic chunks are initially root
-			Index:    i,
-			Status:   types.ChunkingStatusCompleted,
-			TextPos:  textPos,
-			Parents:  []types.Chunk{}, // Will be populated during hierarchy building
-		}
-
-		semanticChunks = append(semanticChunks, chunk)
-	}
-
-	return semanticChunks
+	return chars, positions, nil
 }
 
 // buildHierarchyAndOutput builds hierarchy and outputs chunks
 func (sc *SemanticChunker) buildHierarchyAndOutput(ctx context.Context, semanticChunks []*types.Chunk, options *types.ChunkingOptions, callback func(chunk *types.Chunk) error) error {
-	// Step 1: Output semantic chunks (level 1)
+	// Step 1: Set correct Root status for semantic chunks
+	// If MaxDepth == 1, semantic chunks are root chunks
+	// If MaxDepth > 1, semantic chunks are leaf chunks
+	for _, chunk := range semanticChunks {
+		chunk.Root = (options.MaxDepth == 1) // If MaxDepth==1, semantic chunks are root nodes
+		chunk.Leaf = true                    // Semantic chunks are always leaf nodes
+	}
+
+	// Step 2: Output semantic chunks (MaxDepth level)
 	for _, chunk := range semanticChunks {
 		if err := callback(chunk); err != nil {
 			return fmt.Errorf("callback failed for semantic chunk %s: %w", chunk.ID, err)
@@ -833,7 +489,7 @@ func (sc *SemanticChunker) buildHierarchyAndOutput(ctx context.Context, semantic
 		sc.reportProgress(chunk.ID, "output", "semantic_chunk", nil)
 	}
 
-	// Step 2: Build hierarchy if MaxDepth > 1
+	// Step 3: Build hierarchy if MaxDepth > 1
 	if options.MaxDepth > 1 {
 		return sc.buildHierarchy(ctx, semanticChunks, options, callback)
 	}
@@ -844,9 +500,9 @@ func (sc *SemanticChunker) buildHierarchyAndOutput(ctx context.Context, semantic
 // buildHierarchy builds hierarchical chunks
 func (sc *SemanticChunker) buildHierarchy(ctx context.Context, baseChunks []*types.Chunk, options *types.ChunkingOptions, callback func(chunk *types.Chunk) error) error {
 	currentLevelChunks := baseChunks
-	currentDepth := 2
+	currentDepth := options.MaxDepth - 1 // Start merging from MaxDepth-1 upwards
 
-	for currentDepth <= options.MaxDepth {
+	for currentDepth >= 1 { // Merge up to depth=1
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
@@ -864,6 +520,11 @@ func (sc *SemanticChunker) buildHierarchy(ctx context.Context, baseChunks []*typ
 			break // No more chunks to create
 		}
 
+		// Set correct indices for this level (each level uses 0-N indexing)
+		for i, chunk := range nextLevelChunks {
+			chunk.Index = i // Each level starts from 0: 0, 1, 2, ...
+		}
+
 		// Output next level chunks
 		for _, chunk := range nextLevelChunks {
 			if err := callback(chunk); err != nil {
@@ -877,7 +538,7 @@ func (sc *SemanticChunker) buildHierarchy(ctx context.Context, baseChunks []*typ
 		sc.updateChildrenParents(currentLevelChunks, nextLevelChunks)
 
 		currentLevelChunks = nextLevelChunks
-		currentDepth++
+		currentDepth-- // Move up the hierarchy, depth decreases
 	}
 
 	return nil
@@ -892,36 +553,70 @@ func (sc *SemanticChunker) createNextLevelChunks(childrenChunks []*types.Chunk, 
 	// Calculate target size for this level
 	targetSize := sc.calculateLevelSize(options.Size, depth, options.MaxDepth)
 
+	// Calculate how many children should be grouped together
+	// Higher levels should group more children together
+	remainingLevels := options.MaxDepth - depth + 1
+	groupSize := max(2, remainingLevels) // At least 2 children per parent, more for higher levels
+
 	var parentChunks []*types.Chunk
-	var currentGroup []*types.Chunk
-	var currentSize int
 
-	for _, child := range childrenChunks {
-		childSize := len(child.Text)
+	// Create groups of children, ensuring we actually combine content
+	for i := 0; i < len(childrenChunks); i += groupSize {
+		endIdx := min(i+groupSize, len(childrenChunks))
+		currentGroup := childrenChunks[i:endIdx]
 
-		// Check if adding this child would exceed target size
-		if len(currentGroup) > 0 && currentSize+childSize > targetSize {
-			// Create parent chunk for current group
+		// Only create parent if we're actually combining multiple children
+		if len(currentGroup) >= 2 {
 			parentChunk := sc.createParentChunk(currentGroup, depth, options)
-			parentChunks = append(parentChunks, parentChunk)
-
-			// Start new group
-			currentGroup = []*types.Chunk{child}
-			currentSize = childSize
-		} else {
-			// Add to current group
-			currentGroup = append(currentGroup, child)
-			currentSize += childSize
+			if parentChunk != nil {
+				parentChunks = append(parentChunks, parentChunk)
+			}
+		} else if len(currentGroup) == 1 {
+			// If only one child left, try to merge it with the last parent
+			if len(parentChunks) > 0 {
+				lastParent := parentChunks[len(parentChunks)-1]
+				// Check if adding this child would not exceed target size too much
+				if len(lastParent.Text)+len(currentGroup[0].Text) <= targetSize*2 {
+					// Merge with last parent
+					lastParent.Text += "\n" + currentGroup[0].Text
+					// Update text position
+					if lastParent.TextPos != nil && currentGroup[0].TextPos != nil {
+						lastParent.TextPos.EndIndex = currentGroup[0].TextPos.EndIndex
+						lastParent.TextPos.EndLine = currentGroup[0].TextPos.EndLine
+					}
+				} else {
+					// Create separate parent for this single child (unusual case)
+					parentChunk := sc.createParentChunk(currentGroup, depth, options)
+					if parentChunk != nil {
+						parentChunks = append(parentChunks, parentChunk)
+					}
+				}
+			} else {
+				// Create parent for single child (unusual case)
+				parentChunk := sc.createParentChunk(currentGroup, depth, options)
+				if parentChunk != nil {
+					parentChunks = append(parentChunks, parentChunk)
+				}
+			}
 		}
 	}
 
-	// Create parent for remaining group
-	if len(currentGroup) > 0 {
-		parentChunk := sc.createParentChunk(currentGroup, depth, options)
-		parentChunks = append(parentChunks, parentChunk)
-	}
-
 	return parentChunks, nil
+}
+
+// Helper functions for min/max
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // createParentChunk creates a parent chunk from children
@@ -963,8 +658,9 @@ func (sc *SemanticChunker) createParentChunk(children []*types.Chunk, depth int,
 		}
 	}
 
-	// Determine if this is a leaf node
-	isLeaf := depth >= options.MaxDepth
+	// Determine if this is a leaf node (depth == 1 is top level, not leaf)
+	isLeaf := false      // Parent chunks are never leaf nodes
+	isRoot := depth == 1 // depth == 1 is root node
 
 	return &types.Chunk{
 		ID:       uuid.NewString(),
@@ -973,8 +669,8 @@ func (sc *SemanticChunker) createParentChunk(children []*types.Chunk, depth int,
 		ParentID: "", // Will be set if there are higher levels
 		Depth:    depth,
 		Leaf:     isLeaf,
-		Root:     false, // Parent chunks are not root
-		Index:    0,     // Will be set when adding to parent
+		Root:     isRoot, // depth == 1 is root node
+		Index:    0,      // Will be set when adding to parent
 		Status:   types.ChunkingStatusCompleted,
 		TextPos:  textPos,
 		Parents:  []types.Chunk{}, // Will be populated later
@@ -983,49 +679,99 @@ func (sc *SemanticChunker) createParentChunk(children []*types.Chunk, depth int,
 
 // updateChildrenParents updates children's parent information
 func (sc *SemanticChunker) updateChildrenParents(children, parents []*types.Chunk) {
-	if len(parents) == 0 {
+	if len(parents) == 0 || len(children) == 0 {
 		return
 	}
 
-	// Create mapping from child to parent
-	childToParent := make(map[string]*types.Chunk)
+	// Build parent-child mapping based on text containment
 	childIndex := 0
-
 	for _, parent := range parents {
-		// Calculate how many children belong to this parent based on text content
-		parentText := parent.Text
-		childrenText := ""
-		startChildIndex := childIndex
+		var parentChildren []*types.Chunk
 
+		// Find children that belong to this parent
 		for childIndex < len(children) {
-			if childIndex > startChildIndex {
-				childrenText += "\n"
-			}
-			childrenText += children[childIndex].Text
+			child := children[childIndex]
 
-			// Check if we've matched the parent's text content
-			if strings.Contains(parentText, children[childIndex].Text) {
-				childToParent[children[childIndex].ID] = parent
-				children[childIndex].ParentID = parent.ID
-				children[childIndex].Root = false
-				children[childIndex].Index = childIndex - startChildIndex
+			// Check if child's text is contained in parent's text
+			if strings.Contains(parent.Text, child.Text) {
+				parentChildren = append(parentChildren, child)
 				childIndex++
-
-				// If parent text is fully covered, move to next parent
-				if len(childrenText) >= len(parentText)-10 { // Allow some tolerance
-					break
-				}
 			} else {
+				// This child doesn't belong to current parent
 				break
 			}
+		}
+
+		// Update parent information for all children of this parent
+		for _, child := range parentChildren {
+			// Set basic parent info
+			child.ParentID = parent.ID
+			child.Root = false
+			// Keep the child's existing Index (it's already set correctly within its depth level)
+
+			// Update Parents chain
+			if len(child.Parents) == 0 {
+				// Initialize Parents array with current parent
+				child.Parents = []types.Chunk{*parent}
+			} else {
+				// Append current parent to existing Parents chain
+				// Check if parent already exists to avoid duplicates
+				found := false
+				for j, existingParent := range child.Parents {
+					if existingParent.ID == parent.ID {
+						// Update existing parent entry
+						child.Parents[j] = *parent
+						found = true
+						break
+					}
+				}
+				if !found {
+					child.Parents = append(child.Parents, *parent)
+				}
+			}
+		}
+
+		// If no children found by text containment, fall back to sequential assignment
+		if len(parentChildren) == 0 && childIndex < len(children) {
+			// Assign remaining children proportionally
+			remainingChildren := len(children) - childIndex
+			remainingParents := 0
+			for j := range parents {
+				if j >= childIndex/len(children)*len(parents) {
+					remainingParents++
+				}
+			}
+			if remainingParents == 0 {
+				remainingParents = 1
+			}
+
+			childrenPerParent := max(1, remainingChildren/remainingParents)
+			endIdx := min(childIndex+childrenPerParent, len(children))
+
+			for i := childIndex; i < endIdx; i++ {
+				child := children[i]
+				child.ParentID = parent.ID
+				child.Root = false
+				// Don't modify child.Index - keep global indexing 0-N
+
+				// Update Parents chain
+				if len(child.Parents) == 0 {
+					child.Parents = []types.Chunk{*parent}
+				} else {
+					child.Parents = append(child.Parents, *parent)
+				}
+			}
+			childIndex = endIdx
 		}
 	}
 }
 
 // calculateLevelSize calculates target size for hierarchy level
 func (sc *SemanticChunker) calculateLevelSize(baseSize, depth, maxDepth int) int {
-	// For semantic chunking, we use a different scaling than structured chunking
-	// Higher levels should accommodate more content
+	// Use original logic to maintain compatibility with existing tests
+	// Higher levels (lower depth numbers) should accommodate more content
+	// Formula: (maxDepth - depth + 2) * baseSize
+	// This ensures L1 gets most space, L2 less, L3 (MaxDepth) least
 	multiplier := maxDepth - depth + 2
 	return baseSize * multiplier
 }

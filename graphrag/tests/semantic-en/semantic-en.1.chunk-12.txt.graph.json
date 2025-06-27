@@ -1,0 +1,83 @@
+{
+  "entities": [
+    {
+      "id": "yao_technology",
+      "name": "Yao",
+      "type": "technology",
+      "labels": [
+        "platform",
+        "web development"
+      ],
+      "description": "A platform for creating admin panels without frontend coding",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "widgets_concept",
+      "name": "Table, Form, and API widgets",
+      "type": "concept",
+      "labels": [
+        "UI components"
+      ],
+      "description": "Widgets used in Yao to build admin panels",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "dsl_concept",
+      "name": "DSL",
+      "type": "concept",
+      "labels": [
+        "language"
+      ],
+      "description": "A method used in Yao to describe pages and processes",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-en.1.chunk-12.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-en/semantic-en.1.chunk-12.txt",
+  "generated_at": "2025-06-26T10:10:31+08:00",
+  "model": "gpt-4o",
+  "relationships": [
+    {
+      "type": "uses",
+      "start_node": "yao_technology",
+      "end_node": "widgets_concept",
+      "description": "Yao uses Table, Form, and API widgets to build admin panels",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "uses",
+      "start_node": "yao_technology",
+      "end_node": "dsl_concept",
+      "description": "Yao uses DSL to describe pages and processes",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 838,
+  "total_entities": 3,
+  "total_relationships": 2,
+  "usage": {
+    "total_tokens": 131,
+    "prompt_tokens": 131,
+    "total_texts": 1
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "entities": [
+    {
+      "id": "yao_software",
+      "name": "Yao",
+      "type": "software",
+      "labels": [
+        "technology",
+        "product"
+      ],
+      "description": "Software mentioned in the text available under two licenses",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903688,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "apache_2_0_license",
+      "name": "Apache 2.0 许可证",
+      "type": "license",
+      "labels": [
+        "open-source",
+        "license"
+      ],
+      "properties": {
+        "url": "https://github.com/YaoApp/yao/blob/main/LICENSE"
+      },
+      "description": "Open-source license allowing free use, modification, and distribution of Yao",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903688,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "yao_commercial_license",
+      "name": "Yao 商业许可证",
+      "type": "license",
+      "labels": [
+        "commercial",
+        "license"
+      ],
+      "description": "Commercial license for specific business uses beyond Apache 2.0 scope",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903688,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-zh.1.chunk-14.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-zh/semantic-zh.1.chunk-14.txt",
+  "generated_at": "2025-06-26T10:09:02+08:00",
+  "model": "ep-20250326204837-sxlxr",
+  "relationships": [
+    {
+      "type": "available_under",
+      "start_node": "yao_software",
+      "end_node": "apache_2_0_license",
+      "description": "Yao is available under Apache 2.0 license",
+      "confidence": 0.95,
+      "weight": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903688,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "available_under",
+      "start_node": "yao_software",
+      "end_node": "yao_commercial_license",
+      "description": "Yao is available under commercial license",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903688,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "extends",
+      "start_node": "yao_commercial_license",
+      "end_node": "apache_2_0_license",
+      "description": "Commercial license covers uses beyond Apache 2.0 scope",
+      "confidence": 0.85,
+      "weight": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903688,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 798,
+  "total_entities": 3,
+  "total_relationships": 3,
+  "usage": {
+    "total_tokens": 37,
+    "prompt_tokens": 37,
+    "total_texts": 1
+  }
+}

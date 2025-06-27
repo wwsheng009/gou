@@ -1,0 +1,145 @@
+{
+  "entities": [
+    {
+      "id": "apache_2.0_license",
+      "name": "Apache 2.0 许可证",
+      "type": "许可证",
+      "labels": [
+        "开源",
+        "许可证"
+      ],
+      "description": "开源许可证，涵盖大多数商业应用程序",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "yao_commercial_license",
+      "name": "Yao 商业许可证",
+      "type": "许可证",
+      "labels": [
+        "商业",
+        "许可证"
+      ],
+      "properties": {
+        "url": "https://github.com/YaoApp/yao/blob/main/COMMERCIAL_LICENSE.md"
+      },
+      "description": "Yao项目的商业许可证",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "application_hosting_services",
+      "name": "应用程序托管服务",
+      "type": "服务类型",
+      "labels": [
+        "商业",
+        "服务"
+      ],
+      "description": "需要商业许可证的服务类型之一",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "ai_web_application_generation_services",
+      "name": "AI Web 应用程序生成服务",
+      "type": "服务类型",
+      "labels": [
+        "AI",
+        "商业",
+        "服务"
+      ],
+      "description": "需要商业许可证的服务类型之一",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "yao_project",
+      "name": "Yao",
+      "type": "项目",
+      "labels": [
+        "开源",
+        "项目"
+      ],
+      "description": "需要开发和维护的开源项目",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-zh.1.chunk-15.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-zh/semantic-zh.1.chunk-15.txt",
+  "generated_at": "2025-06-26T10:09:02+08:00",
+  "model": "ep-20250326204837-sxlxr",
+  "relationships": [
+    {
+      "type": "适用于",
+      "start_node": "apache_2.0_license",
+      "end_node": "yao_project",
+      "description": "Apache 2.0 许可证适用于Yao项目",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "需要",
+      "start_node": "application_hosting_services",
+      "end_node": "yao_commercial_license",
+      "description": "应用程序托管服务需要商业许可证",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "需要",
+      "start_node": "ai_web_application_generation_services",
+      "end_node": "yao_commercial_license",
+      "description": "AI Web 应用程序生成服务需要商业许可证",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "提供",
+      "start_node": "yao_project",
+      "end_node": "yao_commercial_license",
+      "description": "Yao项目提供商业许可证",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 496,
+  "total_entities": 5,
+  "total_relationships": 4,
+  "usage": {
+    "total_tokens": 16,
+    "prompt_tokens": 16,
+    "total_texts": 1
+  }
+}

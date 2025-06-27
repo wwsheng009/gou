@@ -1,0 +1,207 @@
+{
+  "entities": [
+    {
+      "id": "最佳学习方法",
+      "name": "最佳学习方法",
+      "type": "学习方法",
+      "labels": [
+        "学习",
+        "方法"
+      ],
+      "description": "通过动手实践和阅读源代码来学习",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "Yao_网站代码库",
+      "name": "Yao 网站代码库",
+      "type": "代码库",
+      "labels": [
+        "代码",
+        "资源"
+      ],
+      "properties": {
+        "url": "https://github.com/YaoApp/website"
+      },
+      "description": "Yao 网站的源代码库",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "Xgen_开发应用",
+      "name": "Xgen 开发应用",
+      "type": "代码库",
+      "labels": [
+        "代码",
+        "资源"
+      ],
+      "properties": {
+        "url": "https://github.com/YaoApp/xgen-dev-app"
+      },
+      "description": "Xgen 的开发应用代码库",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "数据模型",
+      "name": "数据模型",
+      "type": "开发概念",
+      "labels": [
+        "开发",
+        "规划"
+      ],
+      "description": "在 Yao 中，数据模型至关重要，用于规划数据结构和关系",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "models_目录",
+      "name": "models 目录",
+      "type": "开发目录",
+      "labels": [
+        "开发",
+        "目录"
+      ],
+      "description": "用于定义数据模型的目录",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "导入进程示例",
+      "name": "导入进程示例",
+      "type": "代码示例",
+      "labels": [
+        "代码",
+        "示例"
+      ],
+      "properties": {
+        "url": "https://github.com/YaoApp/website/blob/main/scripts/test.ts"
+      },
+      "description": "用于导入演示数据的进程示例",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "AI_生成",
+      "name": "AI 生成",
+      "type": "开发方法",
+      "labels": [
+        "开发",
+        "AI"
+      ],
+      "description": "使用 AI 生成 DSL 并手动调整以满足需求",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "Yao_Playground_代码库",
+      "name": "Yao Playground 代码库",
+      "type": "代码库",
+      "labels": [
+        "代码",
+        "工具"
+      ],
+      "description": "提供用于生成 DSL 的简单工具的代码库",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-zh.1.chunk-6.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-zh/semantic-zh.1.chunk-6.txt",
+  "generated_at": "2025-06-26T10:09:02+08:00",
+  "model": "ep-20250326204837-sxlxr",
+  "relationships": [
+    {
+      "type": "参考资源",
+      "start_node": "最佳学习方法",
+      "end_node": "Yao_网站代码库",
+      "description": "最佳学习方法包括参考 Yao 网站代码库",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "参考资源",
+      "start_node": "最佳学习方法",
+      "end_node": "Xgen_开发应用",
+      "description": "最佳学习方法包括参考 Xgen 开发应用代码库",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "定义位置",
+      "start_node": "数据模型",
+      "end_node": "models_目录",
+      "description": "数据模型在 models 目录中定义",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "使用示例",
+      "start_node": "数据模型",
+      "end_node": "导入进程示例",
+      "description": "导入进程示例用于导入基于数据模型的演示数据",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "使用工具",
+      "start_node": "AI_生成",
+      "end_node": "Yao_Playground_代码库",
+      "description": "AI 生成方法可以使用 Yao Playground 代码库中的工具",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903710,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 1713,
+  "total_entities": 8,
+  "total_relationships": 5,
+  "usage": {
+    "total_tokens": 62,
+    "prompt_tokens": 62,
+    "total_texts": 1
+  }
+}

@@ -1,0 +1,178 @@
+{
+  "entities": [
+    {
+      "id": "logins_directory",
+      "name": "logins",
+      "type": "directory",
+      "labels": [
+        "component",
+        "authentication"
+      ],
+      "properties": {
+        "purpose": "登录类型页面",
+        "scope": "管理面板"
+      },
+      "description": "登录组件：管理面板中的登录类型页面",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "logs_directory",
+      "name": "logs",
+      "type": "directory",
+      "labels": [
+        "logging",
+        "system"
+      ],
+      "properties": {
+        "configurable": "可以在环境变量中设置自定义日志目录",
+        "default_location": "是"
+      },
+      "description": "应用程序日志目录，日志的默认选项",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "models_directory",
+      "name": "models",
+      "type": "directory",
+      "labels": [
+        "data",
+        "structure"
+      ],
+      "properties": {
+        "purpose": "定义数据结构"
+      },
+      "description": "模型组件：定义数据结构",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "neo_directory",
+      "name": "neo",
+      "type": "directory",
+      "labels": [
+        "AI",
+        "chatbot"
+      ],
+      "properties": {
+        "purpose": "AI聊天机器人配置"
+      },
+      "description": "AI 聊天机器人配置目录",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "plugins_directory",
+      "name": "plugins",
+      "type": "directory",
+      "labels": [
+        "plugins",
+        "grpc"
+      ],
+      "properties": {
+        "configurable": "可以在环境变量中设置自定义插件目录",
+        "default_location": "是"
+      },
+      "description": "默认 GRPC 插件目录",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "public_directory",
+      "name": "public",
+      "type": "directory",
+      "labels": [
+        "static",
+        "web"
+      ],
+      "properties": {
+        "access": "HTTP服务器",
+        "additional_purpose": "SUI 模板引擎也会在这里生成网页"
+      },
+      "description": "静态文件目录，可通过 HTTP 服务器访问",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-zh.1.chunk-3.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-zh/semantic-zh.1.chunk-3.txt",
+  "generated_at": "2025-06-26T10:09:02+08:00",
+  "model": "ep-20250326204837-sxlxr",
+  "relationships": [
+    {
+      "type": "adjacent_to",
+      "start_node": "logs_directory",
+      "end_node": "models_directory",
+      "description": "目录相邻关系",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "adjacent_to",
+      "start_node": "models_directory",
+      "end_node": "neo_directory",
+      "description": "目录相邻关系",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "adjacent_to",
+      "start_node": "neo_directory",
+      "end_node": "plugins_directory",
+      "description": "目录相邻关系",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "adjacent_to",
+      "start_node": "plugins_directory",
+      "end_node": "public_directory",
+      "description": "目录相邻关系",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903701,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 531,
+  "total_entities": 6,
+  "total_relationships": 4,
+  "usage": {
+    "total_tokens": 30,
+    "prompt_tokens": 30,
+    "total_texts": 1
+  }
+}

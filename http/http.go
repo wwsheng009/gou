@@ -14,12 +14,79 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/andybalholm/brotli"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/cast"
 	"github.com/yaoapp/gou/dns"
 )
+
+// Transport pool for reusing HTTP transports and avoiding race conditions
+var (
+	transportPool = make(map[string]*http.Transport)
+	poolMutex     sync.RWMutex
+)
+
+// getTransport returns a reusable HTTP transport for the given configuration
+func getTransport(isHTTPS bool, proxy string) *http.Transport {
+	key := fmt.Sprintf("https:%v;proxy:%s", isHTTPS, proxy)
+
+	poolMutex.RLock()
+	if tr, exists := transportPool[key]; exists {
+		poolMutex.RUnlock()
+		return tr
+	}
+	poolMutex.RUnlock()
+
+	poolMutex.Lock()
+	defer poolMutex.Unlock()
+
+	// Double-check pattern
+	if tr, exists := transportPool[key]; exists {
+		return tr
+	}
+
+	// Create new transport with individual dial context to avoid DNS race conditions
+	dialContext := dns.DialContext()
+	tr := &http.Transport{
+		DialContext:         dialContext,
+		MaxIdleConns:        100,              // Production-grade connection pool
+		MaxIdleConnsPerHost: 10,               // Higher per-host limit for better performance
+		IdleConnTimeout:     30 * time.Second, // Close idle connections after 30s
+		DisableKeepAlives:   false,            // Enable keep-alives for performance
+		// Additional production settings
+		TLSHandshakeTimeout:   30 * time.Second,
+		ResponseHeaderTimeout: 300 * time.Second,
+		ExpectContinueTimeout: 30 * time.Second,
+	}
+
+	if isHTTPS {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+
+	if proxy != "" {
+		proxyURL, err := url.Parse(proxy)
+		if err == nil {
+			tr.Proxy = http.ProxyURL(proxyURL)
+		}
+	}
+
+	transportPool[key] = tr
+	return tr
+}
+
+// CloseAllTransports closes all idle connections in the transport pool
+// This is useful for testing and cleanup
+func CloseAllTransports() {
+	poolMutex.Lock()
+	defer poolMutex.Unlock()
+
+	for _, tr := range transportPool {
+		tr.CloseIdleConnections()
+	}
+}
 
 // New make a new  http Request
 func New(url string) *Request {
@@ -196,48 +263,11 @@ func (r *Request) Send(method string, data interface{}) *Response {
 	// Request Header
 	req.Header = r.headers
 
-	// Force using system DSN resolver
-	// var dialer = &net.Dialer{Resolver: &net.Resolver{PreferGo: false}}
-	var dialContext = dns.DialContext()
-	var tr = &http.Transport{DialContext: dialContext}
-	var client *http.Client = &http.Client{Transport: tr}
-
-	// Https SkipVerify false
-	if strings.HasPrefix(r.url, "https://") {
-
-		tr = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			DialContext:     dialContext,
-		}
-
-		// check if the proxy is set
-		proxy := getProxy(true)
-		if proxy != "" {
-			proxyURL, err := url.Parse(proxy)
-			if err != nil {
-				return ResponseError(0, err.Error())
-			}
-			tr.Proxy = http.ProxyURL(proxyURL)
-		}
-
-		client = &http.Client{Transport: tr}
-	} else {
-		// check if the proxy is set
-		proxy := getProxy(false)
-		if proxy != "" {
-			proxyURL, err := url.Parse(proxy)
-			if err != nil {
-				return ResponseError(0, err.Error())
-			}
-			tr := &http.Transport{
-				Proxy:       http.ProxyURL(proxyURL),
-				DialContext: dialContext,
-			}
-
-			client = &http.Client{Transport: tr}
-		}
-	}
-	defer tr.CloseIdleConnections()
+	// Use transport pool to avoid race conditions and improve performance
+	isHTTPS := strings.HasPrefix(r.url, "https://")
+	proxy := getProxy(isHTTPS)
+	tr := getTransport(isHTTPS, proxy)
+	client := &http.Client{Transport: tr}
 
 	// Set the request context
 	if r.ctx != nil {
@@ -311,7 +341,7 @@ func (r *Request) Send(method string, data interface{}) *Response {
 			} else if v, ok := value["msg"].(string); ok {
 				res.Message = v
 			}
-			break
+
 		}
 	}
 
@@ -355,7 +385,7 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 		cast.MergeURLValues(r.query, query)
 	}
 
-	if r.query != nil && len(r.query) > 0 {
+	if len(r.query) > 0 {
 		requestURL = fmt.Sprintf("%s?%s", requestURL, r.query.Encode())
 	}
 
@@ -367,48 +397,11 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 	// Request Header
 	req.Header = r.headers
 
-	// Force using system DSN resolver
-	// var dialer = &net.Dialer{Resolver: &net.Resolver{PreferGo: false}}
-	var dialContext = dns.DialContext()
-	var tr = &http.Transport{DialContext: dialContext}
-	var client *http.Client = &http.Client{Transport: tr}
-
-	// Https SkipVerify false
-	if strings.HasPrefix(r.url, "https://") {
-
-		tr = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			DialContext:     dialContext,
-		}
-
-		// check if the proxy is set
-		proxy := getProxy(true)
-		if proxy != "" {
-			proxyURL, err := url.Parse(proxy)
-			if err != nil {
-				return err
-			}
-			tr.Proxy = http.ProxyURL(proxyURL)
-		}
-
-		client = &http.Client{Transport: tr}
-	} else {
-		// check if the proxy is set
-		proxy := getProxy(false)
-		if proxy != "" {
-			proxyURL, err := url.Parse(proxy)
-			if err != nil {
-				return err
-			}
-			tr := &http.Transport{
-				Proxy:       http.ProxyURL(proxyURL),
-				DialContext: dialContext,
-			}
-
-			client = &http.Client{Transport: tr}
-		}
-	}
-	defer tr.CloseIdleConnections()
+	// Use transport pool to avoid race conditions and improve performance
+	isHTTPS := strings.HasPrefix(r.url, "https://")
+	proxy := getProxy(isHTTPS)
+	tr := getTransport(isHTTPS, proxy)
+	client := &http.Client{Transport: tr}
 
 	resp, err := client.Do(req.WithContext(ctx))
 	if err != nil {
@@ -424,7 +417,7 @@ func (r *Request) Stream(ctx context.Context, method string, data interface{}, h
 		res := handler(scanner.Bytes())
 		switch res {
 		case HandlerReturnOk:
-			break
+			// Continue processing
 
 		case HandlerReturnBreak:
 			return nil
@@ -573,7 +566,6 @@ func (r *Request) formBody() ([]byte, string, *Response) {
 	case []byte:
 		part, _ := writer.CreateFormField("data")
 		part.Write(value)
-		break
 
 	case string: // file upload
 		file, err := os.Open(value)
@@ -583,19 +575,16 @@ func (r *Request) formBody() ([]byte, string, *Response) {
 		defer file.Close()
 		part, _ := writer.CreateFormFile("file", filepath.Base(file.Name()))
 		io.Copy(part, file)
-		break
 
 	case map[string]string:
 		for name, v := range value {
 			_ = writer.WriteField(name, v)
 		}
-		break
 
 	case map[string]interface{}:
 		for name, v := range value {
 			_ = writer.WriteField(name, fmt.Sprintf("%v", v))
 		}
-		break
 
 	default:
 		var data map[string]interface{}

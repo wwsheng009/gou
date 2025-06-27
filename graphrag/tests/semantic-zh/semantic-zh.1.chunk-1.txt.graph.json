@@ -1,0 +1,206 @@
+{
+  "entities": [
+    {
+      "id": "yao_dsl",
+      "name": "Yao DSL",
+      "type": "编程语言",
+      "labels": [
+        "中间语言",
+        "DSL"
+      ],
+      "properties": {
+        "特性": "可在这些方法之间无缝切换",
+        "生成方式": "可由 AI 生成，通过 GUI 创建，或手动编写"
+      },
+      "description": "一种人类和机器都能理解的中间语言",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "yao_runtime",
+      "name": "Yao 运行时",
+      "type": "运行时环境",
+      "labels": [
+        "执行环境"
+      ],
+      "properties": {
+        "功能": "内置 HTTP 服务器用于提供应用程序服务"
+      },
+      "description": "用于执行代码的运行环境",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "yao_application",
+      "name": "Yao 应用程序",
+      "type": "应用程序",
+      "labels": [
+        "软件应用"
+      ],
+      "description": "组件 DSL 的集合以及用 TypeScript 或 JavaScript 编写的自定义进程",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "sui_template_engine",
+      "name": "SUI 模板引擎",
+      "type": "模板引擎",
+      "labels": [
+        "网页开发"
+      ],
+      "properties": {
+        "版本": "0.10.4 版本中的新功能"
+      },
+      "description": "用于构建网页的模板引擎",
+      "confidence": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "typescript",
+      "name": "TypeScript",
+      "type": "编程语言",
+      "labels": [
+        "编程语言"
+      ],
+      "description": "用于编写自定义进程的编程语言",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript",
+      "type": "编程语言",
+      "labels": [
+        "编程语言"
+      ],
+      "description": "用于编写自定义进程的编程语言",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "directory_structure",
+      "name": "目录结构",
+      "type": "文件结构",
+      "labels": [
+        "文件系统"
+      ],
+      "properties": {
+        "DSL文件命名": "小写命名，扩展名为 .[TYPE].yao，例如 article.mod.yao",
+        "组件目录": "models, tables, forms, apis 等",
+        "进程名称格式": "scripts.article.[FUNCTION_NAME]",
+        "进程文件位置": "scripts 目录中",
+        "进程文件命名": "小写命名，例如 article.ts"
+      },
+      "description": "Yao 应用程序的目录组织结构",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-zh.1.chunk-1.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-zh/semantic-zh.1.chunk-1.txt",
+  "generated_at": "2025-06-26T10:09:02+08:00",
+  "model": "ep-20250326204837-sxlxr",
+  "relationships": [
+    {
+      "type": "组成部分",
+      "start_node": "yao_dsl",
+      "end_node": "yao_application",
+      "description": "Yao DSL 是 Yao 应用程序的组成部分",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "用于开发",
+      "start_node": "typescript",
+      "end_node": "yao_application",
+      "description": "TypeScript 用于开发 Yao 应用程序的自定义进程",
+      "confidence": 0.85,
+      "weight": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "用于开发",
+      "start_node": "javascript",
+      "end_node": "yao_application",
+      "description": "JavaScript 用于开发 Yao 应用程序的自定义进程",
+      "confidence": 0.85,
+      "weight": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "用于开发",
+      "start_node": "sui_template_engine",
+      "end_node": "yao_application",
+      "description": "SUI 模板引擎用于开发 Yao 应用程序的网站部分",
+      "confidence": 0.8,
+      "weight": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "执行环境",
+      "start_node": "yao_runtime",
+      "end_node": "yao_application",
+      "description": "Yao 运行时用于执行 Yao 应用程序",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "组织结构",
+      "start_node": "directory_structure",
+      "end_node": "yao_application",
+      "description": "目录结构描述了 Yao 应用程序的文件组织方式",
+      "confidence": 0.85,
+      "weight": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903711,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 935,
+  "total_entities": 7,
+  "total_relationships": 6,
+  "usage": {
+    "total_tokens": 44,
+    "prompt_tokens": 44,
+    "total_texts": 1
+  }
+}

@@ -112,9 +112,9 @@ func createTestDocuments(count int) []*types.Document {
 	docs := make([]*types.Document, count)
 	for i := 0; i < count; i++ {
 		docs[i] = &types.Document{
-			ID:          fmt.Sprintf("test_doc_%d", i),
-			PageContent: fmt.Sprintf("This is test document content number %d. It contains useful information for testing purposes.", i),
-			Vector:      generateTestVector(128), // 128-dimensional test vector
+			ID:      fmt.Sprintf("test_doc_%d", i),
+			Content: fmt.Sprintf("This is test document content number %d. It contains useful information for testing purposes.", i),
+			Vector:  generateTestVector(128), // 128-dimensional test vector
 			Metadata: map[string]interface{}{
 				"doc_index": i,
 				"category":  fmt.Sprintf("category_%d", i%3),
@@ -328,6 +328,111 @@ func TestAddDocuments(t *testing.T) {
 		} else if !contains(err.Error(), "not connected") {
 			t.Errorf("AddDocuments() error = %v, want to contain 'not connected'", err)
 		}
+	})
+
+	t.Run("named vectors with default dense", func(t *testing.T) {
+		// Create a collection with sparse vector support
+		store, baseConfig := setupConnectedStoreForDocument(t)
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = store.Disconnect(ctx)
+		}()
+
+		collectionName := fmt.Sprintf("test_named_vectors_%d", time.Now().UnixNano())
+		config := baseConfig
+		config.CollectionName = collectionName
+		config.EnableSparseVectors = true
+		config.DenseVectorName = "dense"
+		config.SparseVectorName = "sparse"
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		err := store.CreateCollection(ctx, &config)
+		if err != nil {
+			t.Fatalf("Failed to create test collection: %v", err)
+		}
+		defer cleanupCollection(t, store, collectionName)
+
+		opts := types.AddDocumentOptions{
+			CollectionName: collectionName,
+			Documents:      createTestDocuments(3),
+			BatchSize:      10,
+			// VectorUsing not specified, should default to "dense"
+		}
+
+		ids, err := store.AddDocuments(ctx, &opts)
+		if err != nil {
+			t.Errorf("AddDocuments() with named vectors error = %v, want nil", err)
+		}
+		if len(ids) != 3 {
+			t.Errorf("AddDocuments() returned %d IDs, want 3", len(ids))
+		}
+	})
+
+	t.Run("named vectors with custom vector name", func(t *testing.T) {
+		// Create a collection with sparse vector support
+		store, baseConfig := setupConnectedStoreForDocument(t)
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = store.Disconnect(ctx)
+		}()
+
+		collectionName := fmt.Sprintf("test_custom_vector_%d", time.Now().UnixNano())
+		config := baseConfig
+		config.CollectionName = collectionName
+		config.EnableSparseVectors = true
+		config.DenseVectorName = "custom_dense"
+		config.SparseVectorName = "custom_sparse"
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		err := store.CreateCollection(ctx, &config)
+		if err != nil {
+			t.Fatalf("Failed to create test collection: %v", err)
+		}
+		defer cleanupCollection(t, store, collectionName)
+
+		opts := types.AddDocumentOptions{
+			CollectionName: collectionName,
+			Documents:      createTestDocuments(2),
+			BatchSize:      10,
+			VectorUsing:    "custom_dense", // Specify custom vector name
+		}
+
+		ids, err := store.AddDocuments(ctx, &opts)
+		if err != nil {
+			t.Errorf("AddDocuments() with custom vector name error = %v, want nil", err)
+		}
+		if len(ids) != 2 {
+			t.Errorf("AddDocuments() returned %d IDs, want 2", len(ids))
+		}
+	})
+
+	t.Run("traditional collection without named vectors", func(t *testing.T) {
+		// Test with traditional collection (no sparse vectors)
+		withDocumentTestEnvironment(t, func(env *DocumentTestEnvironment) {
+			opts := types.AddDocumentOptions{
+				CollectionName: env.CollectionName,
+				Documents:      createTestDocuments(2),
+				BatchSize:      10,
+				VectorUsing:    "dense", // Should be ignored for traditional collections
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			ids, err := env.Store.AddDocuments(ctx, &opts)
+			if err != nil {
+				t.Errorf("AddDocuments() with traditional collection error = %v, want nil", err)
+			}
+			if len(ids) != 2 {
+				t.Errorf("AddDocuments() returned %d IDs, want 2", len(ids))
+			}
+		})
 	})
 }
 
@@ -1824,9 +1929,9 @@ func TestDocumentOperationsEdgeCases(t *testing.T) {
 		}
 
 		largeDoc := &types.Document{
-			ID:          "large_doc",
-			PageContent: string(largeContent),
-			Vector:      generateTestVector(128),
+			ID:      "large_doc",
+			Content: string(largeContent),
+			Vector:  generateTestVector(128),
 			Metadata: map[string]interface{}{
 				"size": "large",
 				"type": "test",
@@ -1848,9 +1953,9 @@ func TestDocumentOperationsEdgeCases(t *testing.T) {
 
 	t.Run("document with complex metadata", func(t *testing.T) {
 		complexDoc := &types.Document{
-			ID:          "complex_doc",
-			PageContent: "Document with complex metadata",
-			Vector:      generateTestVector(128),
+			ID:      "complex_doc",
+			Content: "Document with complex metadata",
+			Vector:  generateTestVector(128),
 			Metadata: map[string]interface{}{
 				"string_field": "test string",
 				"int_field":    42,
@@ -1897,9 +2002,9 @@ func TestDocumentOperationsEdgeCases(t *testing.T) {
 
 	t.Run("document with very high dimensional vector", func(t *testing.T) {
 		highDimDoc := &types.Document{
-			ID:          "high_dim_doc",
-			PageContent: "Document with high-dimensional vector",
-			Vector:      generateTestVector(2048), // Very high dimension
+			ID:      "high_dim_doc",
+			Content: "Document with high-dimensional vector",
+			Vector:  generateTestVector(2048), // Very high dimension
 			Metadata: map[string]interface{}{
 				"dimensions": 2048,
 			},
@@ -1937,17 +2042,17 @@ func TestConvertScoredPointToDocument(t *testing.T) {
 			point: &qdrant.ScoredPoint{
 				Id: qdrant.NewIDNum(12345),
 				Payload: map[string]*qdrant.Value{
-					"id":           qdrant.NewValueString("test_doc_no_vec"),
-					"page_content": qdrant.NewValueString("No vector content"),
+					"id":      qdrant.NewValueString("test_doc_no_vec"),
+					"content": qdrant.NewValueString("No vector content"),
 				},
 				Score: 0.85,
 			},
 			includeVector:  false,
 			includePayload: true,
 			wantDoc: &types.Document{
-				ID:          "test_doc_no_vec",
-				PageContent: "No vector content",
-				Vector:      nil,
+				ID:      "test_doc_no_vec",
+				Content: "No vector content",
+				Vector:  nil,
 			},
 		},
 		{
@@ -1985,8 +2090,8 @@ func TestConvertScoredPointToDocument(t *testing.T) {
 			if got.ID != tt.wantDoc.ID {
 				t.Errorf("convertScoredPointToDocument() ID = %v, want %v", got.ID, tt.wantDoc.ID)
 			}
-			if got.PageContent != tt.wantDoc.PageContent {
-				t.Errorf("convertScoredPointToDocument() PageContent = %v, want %v", got.PageContent, tt.wantDoc.PageContent)
+			if got.Content != tt.wantDoc.Content {
+				t.Errorf("convertScoredPointToDocument() Content = %v, want %v", got.Content, tt.wantDoc.Content)
 			}
 
 			// Check vector
@@ -2309,7 +2414,7 @@ func TestConvertFilterToQdrant(t *testing.T) {
 					t.Errorf("convertFilterToQdrant() returned nil result")
 				} else {
 					// Verify the filter structure
-					if result.Must == nil || len(result.Must) == 0 {
+					if len(result.Must) == 0 {
 						t.Errorf("convertFilterToQdrant() returned filter with no conditions")
 					}
 
@@ -2569,8 +2674,8 @@ func TestConvertScoredPointToDocumentWithVectorAndMetadata(t *testing.T) {
 	point := &qdrant.ScoredPoint{
 		Id: qdrant.NewIDNum(12345),
 		Payload: map[string]*qdrant.Value{
-			"id":           qdrant.NewValueString("test_doc"),
-			"page_content": qdrant.NewValueString("Test content"),
+			"id":      qdrant.NewValueString("test_doc"),
+			"content": qdrant.NewValueString("Test content"),
 			"metadata": qdrant.NewValueStruct(&qdrant.Struct{
 				Fields: map[string]*qdrant.Value{
 					"category": qdrant.NewValueString("test"),
@@ -2586,8 +2691,8 @@ func TestConvertScoredPointToDocumentWithVectorAndMetadata(t *testing.T) {
 	if doc.ID != "test_doc" {
 		t.Errorf("convertScoredPointToDocument() ID = %v, want %v", doc.ID, "test_doc")
 	}
-	if doc.PageContent != "Test content" {
-		t.Errorf("convertScoredPointToDocument() PageContent = %v, want %v", doc.PageContent, "Test content")
+	if doc.Content != "Test content" {
+		t.Errorf("convertScoredPointToDocument() Content = %v, want %v", doc.Content, "Test content")
 	}
 	if doc.Metadata == nil {
 		t.Errorf("convertScoredPointToDocument() Metadata is nil")
@@ -2743,6 +2848,89 @@ func TestListDocumentsScrollError(t *testing.T) {
 			t.Error("ListDocuments() expected error for nonexistent collection, got nil")
 		} else if !contains(err.Error(), "failed to list documents") {
 			t.Errorf("ListDocuments() error = %v, want to contain 'failed to list documents'", err)
+		}
+	})
+}
+
+// =============================================================================
+// Tests for collectionUsesNamedVectors method
+// =============================================================================
+
+func TestCollectionUsesNamedVectors(t *testing.T) {
+	store, baseConfig := setupConnectedStoreForDocument(t)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = store.Disconnect(ctx)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	t.Run("traditional collection returns false", func(t *testing.T) {
+		// Create traditional collection (no sparse vectors)
+		collectionName := fmt.Sprintf("test_traditional_%d", time.Now().UnixNano())
+		config := baseConfig
+		config.CollectionName = collectionName
+		config.EnableSparseVectors = false
+
+		err := store.CreateCollection(ctx, &config)
+		if err != nil {
+			t.Fatalf("Failed to create traditional collection: %v", err)
+		}
+		defer cleanupCollection(t, store, collectionName)
+
+		usesNamed, err := store.collectionUsesNamedVectors(ctx, collectionName)
+		if err != nil {
+			t.Errorf("collectionUsesNamedVectors() error = %v, want nil", err)
+		}
+		if usesNamed {
+			t.Errorf("collectionUsesNamedVectors() = true, want false for traditional collection")
+		}
+	})
+
+	t.Run("named vector collection returns true", func(t *testing.T) {
+		// Create collection with sparse vectors (named vectors)
+		collectionName := fmt.Sprintf("test_named_%d", time.Now().UnixNano())
+		config := baseConfig
+		config.CollectionName = collectionName
+		config.EnableSparseVectors = true
+		config.DenseVectorName = "dense"
+		config.SparseVectorName = "sparse"
+
+		err := store.CreateCollection(ctx, &config)
+		if err != nil {
+			t.Fatalf("Failed to create named vector collection: %v", err)
+		}
+		defer cleanupCollection(t, store, collectionName)
+
+		usesNamed, err := store.collectionUsesNamedVectors(ctx, collectionName)
+		if err != nil {
+			t.Errorf("collectionUsesNamedVectors() error = %v, want nil", err)
+		}
+		if !usesNamed {
+			t.Errorf("collectionUsesNamedVectors() = false, want true for named vector collection")
+		}
+	})
+
+	t.Run("nonexistent collection returns error", func(t *testing.T) {
+		_, err := store.collectionUsesNamedVectors(ctx, "nonexistent_collection")
+		if err == nil {
+			t.Error("collectionUsesNamedVectors() expected error for nonexistent collection, got nil")
+		} else if !contains(err.Error(), "failed to get collection info") {
+			t.Errorf("collectionUsesNamedVectors() error = %v, want to contain 'failed to get collection info'", err)
+		}
+	})
+
+	t.Run("not connected store returns error", func(t *testing.T) {
+		unconnectedStore := NewStore()
+		defer func() {
+			_ = unconnectedStore.Disconnect(context.Background())
+		}()
+
+		_, err := unconnectedStore.collectionUsesNamedVectors(ctx, "test_collection")
+		if err == nil {
+			t.Error("collectionUsesNamedVectors() expected error for not connected store, got nil")
 		}
 	})
 }

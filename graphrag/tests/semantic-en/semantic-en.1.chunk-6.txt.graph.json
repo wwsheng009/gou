@@ -1,0 +1,161 @@
+{
+  "entities": [
+    {
+      "id": "yao_application",
+      "name": "Yao application",
+      "type": "concept",
+      "labels": [
+        "application",
+        "software"
+      ],
+      "description": "A type of application developed using Yao platform",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "dsl",
+      "name": "DSL",
+      "type": "technology",
+      "labels": [
+        "language",
+        "technology"
+      ],
+      "description": "A language used to describe widgets in Yao applications",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "typescript",
+      "name": "TypeScript",
+      "type": "technology",
+      "labels": [
+        "programming language"
+      ],
+      "description": "A programming language used to write custom processes in Yao applications",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "javascript",
+      "name": "JavaScript",
+      "type": "technology",
+      "labels": [
+        "programming language"
+      ],
+      "description": "A programming language used to write custom processes in Yao applications",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "grpc_plugins",
+      "name": "GRPC plugins",
+      "type": "technology",
+      "labels": [
+        "plugin",
+        "technology"
+      ],
+      "description": "Plugins used in Yao applications for custom processes",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "yao_runtime",
+      "name": "Yao runtime",
+      "type": "technology",
+      "labels": [
+        "runtime",
+        "environment"
+      ],
+      "description": "The runtime environment used to debug and run Yao applications",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-en.1.chunk-6.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-en/semantic-en.1.chunk-6.txt",
+  "generated_at": "2025-06-26T10:10:31+08:00",
+  "model": "gpt-4o",
+  "relationships": [
+    {
+      "type": "uses",
+      "start_node": "yao_application",
+      "end_node": "dsl",
+      "description": "Yao applications use DSL to describe widgets",
+      "confidence": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "uses",
+      "start_node": "yao_application",
+      "end_node": "typescript",
+      "description": "Yao applications use TypeScript to write custom processes",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "uses",
+      "start_node": "yao_application",
+      "end_node": "javascript",
+      "description": "Yao applications use JavaScript to write custom processes",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "uses",
+      "start_node": "yao_application",
+      "end_node": "grpc_plugins",
+      "description": "Yao applications use GRPC plugins for custom processes",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "uses",
+      "start_node": "yao_application",
+      "end_node": "yao_runtime",
+      "description": "Yao applications use Yao runtime to debug and run",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903823,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 449,
+  "total_entities": 6,
+  "total_relationships": 5,
+  "usage": {
+    "total_tokens": 77,
+    "prompt_tokens": 77,
+    "total_texts": 1
+  }
+}

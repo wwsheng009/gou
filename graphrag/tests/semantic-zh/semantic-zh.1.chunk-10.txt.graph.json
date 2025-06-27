@@ -1,0 +1,152 @@
+{
+  "entities": [
+    {
+      "id": "yao_runtime",
+      "name": "Yao 运行时",
+      "type": "执行环境",
+      "labels": [
+        "runtime",
+        "server"
+      ],
+      "description": "用于运行进程的服务器端执行环境",
+      "confidence": 0.95,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "utils_app_ping",
+      "name": "utils.app.Ping",
+      "type": "内部进程",
+      "labels": [
+        "process",
+        "utility"
+      ],
+      "properties": {
+        "command": "yao run utils.app.Ping"
+      },
+      "description": "返回 Yao 的版本",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "scripts_test_hello",
+      "name": "scripts.test.Hello",
+      "type": "自定义进程",
+      "labels": [
+        "process",
+        "custom"
+      ],
+      "properties": {
+        "command": "yao run scripts.test.Hello",
+        "language": "TypeScript"
+      },
+      "description": "返回问候语的自定义进程",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "scripts_test_pets",
+      "name": "scripts.test.Pets",
+      "type": "自定义进程",
+      "labels": [
+        "process",
+        "custom"
+      ],
+      "properties": {
+        "command": "yao run scripts.test.Pets",
+        "language": "TypeScript"
+      },
+      "description": "返回宠物列表的自定义进程",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "models_tests_pet_get",
+      "name": "models.tests.pet.Get",
+      "type": "数据模型",
+      "labels": [
+        "model",
+        "data"
+      ],
+      "description": "获取宠物数据的模型方法",
+      "confidence": 0.8,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-zh.1.chunk-10.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-zh/semantic-zh.1.chunk-10.txt",
+  "generated_at": "2025-06-26T10:09:02+08:00",
+  "model": "ep-20250326204837-sxlxr",
+  "relationships": [
+    {
+      "type": "运行于",
+      "start_node": "utils_app_ping",
+      "end_node": "yao_runtime",
+      "description": "内部进程运行于 Yao 运行时",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "运行于",
+      "start_node": "scripts_test_hello",
+      "end_node": "yao_runtime",
+      "description": "自定义进程运行于 Yao 运行时",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "运行于",
+      "start_node": "scripts_test_pets",
+      "end_node": "yao_runtime",
+      "description": "自定义进程运行于 Yao 运行时",
+      "confidence": 0.9,
+      "weight": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "type": "调用",
+      "start_node": "scripts_test_pets",
+      "end_node": "models_tests_pet_get",
+      "description": "Pets 进程调用 pet.Get 模型方法",
+      "confidence": 0.85,
+      "weight": 0.85,
+      "extraction_method": "llm",
+      "created_at": 1750903697,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "text_length": 766,
+  "total_entities": 5,
+  "total_relationships": 4,
+  "usage": {
+    "total_tokens": 85,
+    "prompt_tokens": 85,
+    "total_texts": 1
+  }
+}

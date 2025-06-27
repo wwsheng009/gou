@@ -1,0 +1,115 @@
+{
+  "entities": [
+    {
+      "id": "flows_directory",
+      "name": "flows",
+      "type": "directory",
+      "labels": [
+        "Flow Widgets"
+      ],
+      "description": "Flow Widgets: define the process flow",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "forms_directory",
+      "name": "forms",
+      "type": "directory",
+      "labels": [
+        "Form Widgets"
+      ],
+      "description": "Form Widgets: form-type pages in the admin panel",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "icons_directory",
+      "name": "icons",
+      "type": "directory",
+      "labels": [
+        "Icons"
+      ],
+      "description": "The application icons used in the admin panel",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "langs_directory",
+      "name": "langs",
+      "type": "directory",
+      "labels": [
+        "Language Files"
+      ],
+      "description": "I18n language files used in the admin panel",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "logins_directory",
+      "name": "logins",
+      "type": "directory",
+      "labels": [
+        "Login Widgets"
+      ],
+      "description": "Login Widgets: login-type pages in the admin panel",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "logs_directory",
+      "name": "logs",
+      "type": "directory",
+      "labels": [
+        "Log Directory"
+      ],
+      "description": "The application log directory, the default option of log. Custom log directory can be set in environment variables.",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    },
+    {
+      "id": "models_directory",
+      "name": "models",
+      "type": "directory",
+      "labels": [
+        "Model Widgets"
+      ],
+      "description": "Model Widgets: define the data structure",
+      "confidence": 0.9,
+      "extraction_method": "llm",
+      "created_at": 1750903821,
+      "version": 1,
+      "status": "active"
+    }
+  ],
+  "file": "semantic-en.1.chunk-4.txt",
+  "full_path": "/Users/max/Yao/gou/graphrag/tests/semantic-en/semantic-en.1.chunk-4.txt",
+  "generated_at": "2025-06-26T10:10:31+08:00",
+  "model": "gpt-4o",
+  "relationships": null,
+  "text_length": 524,
+  "total_entities": 7,
+  "total_relationships": 0,
+  "usage": {
+    "total_tokens": 83,
+    "prompt_tokens": 83,
+    "total_texts": 1
+  }
+}
