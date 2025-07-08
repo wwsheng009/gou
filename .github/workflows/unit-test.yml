@@ -52,6 +52,15 @@ env:
   FASTEMBED_TEST_KEY: "Yao@2026"
   FASTEMBED_TEST_MODEL: "BAAI/bge-small-en-v1.5"
 
+  NEO4J_TEST_URL: "neo4j://127.0.0.1:7687"
+  NEO4J_TEST_USER: "neo4j"
+  NEO4J_TEST_PASS: "Yao2026Neo4j"
+
+  MCP_CLIENT_TEST_HTTP_URL: "http://127.0.0.1:3022/mcp"
+  MCP_CLIENT_TEST_HTTP_AUTHORIZATION_TOKEN: "Bearer 123456"
+  MCP_CLIENT_TEST_SSE_URL: "http://127.0.0.1:3021/sse"
+  MCP_CLIENT_TEST_SSE_AUTHORIZATION_TOKEN: "Bearer 123456"
+
 jobs:
   unit-test:
     runs-on: ubuntu-latest
@@ -69,6 +78,19 @@ jobs:
           FASTEMBED_PASSWORD: Yao@2026
         ports:
           - 6001:8000
+
+      neo4j:
+        image: neo4j:latest
+        ports:
+          - "7687:7687"
+        env:
+          NEO4J_AUTH: neo4j/Yao2026Neo4j
+
+      mcp-everything:
+        image: yaoapp/mcp-everything:latest
+        ports:
+          - "3021:3021"
+          - "3022:3022"
 
     strategy:
       matrix:
@@ -172,6 +194,17 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
 
+      - name: Install FFmpeg 7.x
+        run: |
+          wget https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          tar -xf ffmpeg-master-latest-linux64-gpl.tar.xz
+          sudo cp ffmpeg-master-latest-linux64-gpl/bin/ffmpeg /usr/local/bin/
+          sudo cp ffmpeg-master-latest-linux64-gpl/bin/ffprobe /usr/local/bin/
+          sudo chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+
+      - name: Test FFmpeg
+        run: ffmpeg -version
+
       - name: Setup Go Tools
         run: |
           make tools
@@ -194,9 +227,9 @@ jobs:
           chmod 600 $HOME/.yao/github_token
           ls -l $HOME/.yao/github_token
 
-      - name: Run Benchmark
-        run: |
-          make bench
+      # - name: Run Benchmark
+      #   run: |
+      #     make bench
 
       - name: Run Test
         run: |

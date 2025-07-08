@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ===== Vector Index Type Enums =====
@@ -990,9 +991,8 @@ type ExtractionPayload struct {
 
 // ExtractionOptions represents options for extraction
 type ExtractionOptions struct {
-	Use          Extraction   `json:"use"`           // Use the extraction method
-	Embedding    Embedding    `json:"embedding"`     // Embedding function to use for extraction
-	LLMOptimizer LLMOptimizer `json:"llm_optimizer"` // LLM optimizer for extraction, deduplication, optimization, etc. if not provided, will not be used
+	Use       Extraction `json:"use"`       // Use the extraction method
+	Embedding Embedding  `json:"embedding"` // Embedding function to use for extraction
 }
 
 // LLMOptimizer represents the LLM optimizer for extraction
@@ -1123,10 +1123,32 @@ type SchemaIndex struct {
 
 // GraphQueryOptions represents options for graph queries
 type GraphQueryOptions struct {
-	Limit      int                    `json:"limit,omitempty"`
-	Skip       int                    `json:"skip,omitempty"`
+	GraphName string `json:"graph_name"` // Target graph name
+
+	// Query Type and Content
+	QueryType string `json:"query_type"`      // "cypher", "traversal", "path", "analytics", "custom"
+	Query     string `json:"query,omitempty"` // Query string (e.g., Cypher query)
+
+	// Traversal-specific options (when QueryType is "traversal")
+	TraversalOptions *GraphTraversalOptions `json:"traversal_options,omitempty"`
+
+	// Analytics-specific options (when QueryType is "analytics")
+	AnalyticsOptions *GraphAnalyticsOptions `json:"analytics_options,omitempty"`
+
+	// General query parameters
 	Parameters map[string]interface{} `json:"parameters,omitempty"` // Query parameters
-	Timeout    int                    `json:"timeout,omitempty"`    // Query timeout in seconds
+
+	// Result control
+	Limit      int      `json:"limit,omitempty"`
+	Skip       int      `json:"skip,omitempty"`
+	OrderBy    []string `json:"order_by,omitempty"`    // Fields to order by
+	ReturnType string   `json:"return_type,omitempty"` // "nodes", "relationships", "paths", "records", "all"
+
+	// Performance and safety
+	Timeout  int  `json:"timeout,omitempty"`   // Query timeout in seconds
+	ReadOnly bool `json:"read_only,omitempty"` // Whether this is a read-only query
+	Explain  bool `json:"explain,omitempty"`   // Whether to return query execution plan
+	Profile  bool `json:"profile,omitempty"`   // Whether to return detailed profiling info
 }
 
 // GraphTraversalOptions represents options for graph traversal
@@ -1143,6 +1165,7 @@ type GraphTraversalOptions struct {
 
 // CommunityDetectionOptions represents options for community detection
 type CommunityDetectionOptions struct {
+	GraphName  string                 `json:"graph_name"`           // Target graph name
 	Algorithm  string                 `json:"algorithm"`            // "leiden", "louvain", "label_propagation"
 	MaxLevels  int                    `json:"max_levels,omitempty"` // Maximum hierarchy levels
 	Resolution float64                `json:"resolution,omitempty"` // Resolution parameter
@@ -1215,9 +1238,11 @@ type VoteOption struct {
 	Vote   string
 }
 
-// RestoreOptions represents options for restoring data
+// RestoreOptions represents options for restoring data (unified for VectorStore and GraphStore)
 type RestoreOptions struct {
-	CollectionName string                 `json:"collection_name"`
+	CollectionName string                 `json:"collection_name,omitempty"` // For VectorStore (deprecated, use Name)
+	GraphName      string                 `json:"graph_name,omitempty"`      // For GraphStore (deprecated, use Name)
+	Name           string                 `json:"name"`                      // Unified name field for collection/graph
 	Force          bool                   `json:"force"`
 	ExtraParams    map[string]interface{} `json:"extra_params,omitempty"`
 }
@@ -1340,6 +1365,15 @@ type SearchEngineStats struct {
 	ErrorRate        float64  `json:"error_rate"`        // Error rate (0-1)
 	IndexSize        int64    `json:"index_size_bytes"`  // Total index size in bytes
 	DocumentCount    int64    `json:"document_count"`    // Total number of documents
+}
+
+// ===== ID Generation Types =====
+
+// CollectionIDs represents the collection identifiers for vector, graph, and KV store databases
+type CollectionIDs struct {
+	Vector string `json:"vector"` // Vector database collection ID
+	Graph  string `json:"graph"`  // Graph database collection ID (uses Vector as prefix)
+	Store  string `json:"store"`  // KV store database collection ID (uses Vector as prefix)
 }
 
 // ===== Embedding Result Types =====
@@ -1468,4 +1502,558 @@ func (ers *EmbeddingResults) Count() int {
 		return len(ers.Embeddings)
 	}
 	return len(ers.SparseEmbeddings)
+}
+
+// ===== Graph Database Types (Flexible Design) =====
+
+// GraphStoreConfig represents configuration for graph store (similar to VectorStoreConfig)
+type GraphStoreConfig struct {
+	// Basic Configuration
+	StoreType   string `json:"store_type"`   // "neo4j", "kuzu", etc.
+	DatabaseURL string `json:"database_url"` // Database connection URL
+
+	// Performance Settings (common across all stores)
+	BatchSize    int `json:"batch_size,omitempty"`    // Default batch size for operations
+	QueryTimeout int `json:"query_timeout,omitempty"` // Query timeout in seconds
+
+	// Business Logic Settings (common graph operations)
+	DefaultGraphName string `json:"default_graph_name,omitempty"` // Default graph/namespace to use
+	AutoCreateGraph  bool   `json:"auto_create_graph,omitempty"`  // Whether to auto-create graphs if they don't exist
+
+	// Schema and Indexing (common across graph databases)
+	AutoIndex      bool     `json:"auto_index,omitempty"`       // Whether to automatically create indexes
+	IndexNodeProps []string `json:"index_node_props,omitempty"` // Node properties to auto-index (id, name, type, etc.)
+	IndexRelProps  []string `json:"index_rel_props,omitempty"`  // Relationship properties to auto-index
+	EnforceSchema  bool     `json:"enforce_schema,omitempty"`   // Whether to enforce strict schema validation
+
+	// Transaction Settings (most graph DBs support transactions)
+	AutoCommit      bool `json:"auto_commit,omitempty"`      // Whether to auto-commit single operations
+	TransactionSize int  `json:"transaction_size,omitempty"` // Max operations per transaction (for batch)
+
+	// Data Consistency (common business requirement)
+	AllowDuplicates bool `json:"allow_duplicates,omitempty"`  // Whether to allow duplicate nodes/relationships
+	MergeOnConflict bool `json:"merge_on_conflict,omitempty"` // Whether to merge when conflicts occur
+
+	// Store-specific Configuration (delegated to individual drivers)
+	DriverConfig map[string]interface{} `json:"driver_config,omitempty"` // Driver-specific configuration
+}
+
+// Validate validates the graph store configuration
+func (c *GraphStoreConfig) Validate() error {
+	if c.StoreType == "" {
+		return fmt.Errorf("store type cannot be empty")
+	}
+	if c.DatabaseURL == "" {
+		return fmt.Errorf("database_url must be provided")
+	}
+	return nil
+}
+
+// GraphConfig represents configuration for a specific graph
+type GraphConfig struct {
+	Description  string                 `json:"description,omitempty"`
+	Properties   map[string]interface{} `json:"properties,omitempty"`
+	IndexConfig  *GraphIndexConfig      `json:"index_config,omitempty"`
+	SchemaConfig *GraphSchemaConfig     `json:"schema_config,omitempty"`
+}
+
+// GraphIndexConfig represents index configuration for a graph
+type GraphIndexConfig struct {
+	AutoIndex      bool     `json:"auto_index"`                // Whether to automatically create indexes
+	NodeIndexes    []string `json:"node_indexes,omitempty"`    // Properties to index for nodes
+	RelIndexes     []string `json:"rel_indexes,omitempty"`     // Properties to index for relationships
+	FullTextFields []string `json:"fulltext_fields,omitempty"` // Fields for full-text search
+	VectorFields   []string `json:"vector_fields,omitempty"`   // Fields for vector similarity search
+}
+
+// GraphSchemaConfig represents schema configuration
+type GraphSchemaConfig struct {
+	Strict      bool                   `json:"strict"` // Whether to enforce strict schema
+	NodeLabels  []string               `json:"node_labels,omitempty"`
+	RelTypes    []string               `json:"rel_types,omitempty"`
+	Constraints []SchemaConstraint     `json:"constraints,omitempty"`
+	Defaults    map[string]interface{} `json:"defaults,omitempty"`
+}
+
+// GraphNode represents a flexible graph node (dynamic properties)
+type GraphNode struct {
+	ID         string                 `json:"id"`
+	Labels     []string               `json:"labels"`
+	Properties map[string]interface{} `json:"properties"`
+
+	// Vector embedding support
+	Embedding  []float64            `json:"embedding,omitempty"`  // Primary embedding vector
+	Embeddings map[string][]float64 `json:"embeddings,omitempty"` // Multiple named embeddings
+
+	// GraphRAG specific fields (simplified design)
+	EntityType  string  `json:"entity_type,omitempty"` // Entity type
+	Description string  `json:"description,omitempty"` // Entity description
+	Confidence  float64 `json:"confidence,omitempty"`  // Confidence score
+	Importance  float64 `json:"importance,omitempty"`  // Importance score (PageRank, etc.)
+
+	// Metadata
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Version   int       `json:"version"`
+}
+
+// GraphRelationship represents a flexible graph relationship
+type GraphRelationship struct {
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	StartNode  string                 `json:"start_node"`
+	EndNode    string                 `json:"end_node"`
+	Properties map[string]interface{} `json:"properties"`
+
+	// Vector embedding support
+	Embedding  []float64            `json:"embedding,omitempty"`  // Primary embedding vector
+	Embeddings map[string][]float64 `json:"embeddings,omitempty"` // Multiple named embeddings
+
+	// GraphRAG specific fields (simplified design)
+	Description string  `json:"description,omitempty"` // Relationship description
+	Confidence  float64 `json:"confidence,omitempty"`  // Confidence score
+	Weight      float64 `json:"weight,omitempty"`      // Relationship weight
+
+	// Metadata
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Version   int       `json:"version"`
+}
+
+// AddNodesOptions represents options for adding nodes
+type AddNodesOptions struct {
+	GraphName string       `json:"graph_name"`
+	Nodes     []*GraphNode `json:"nodes"`
+	BatchSize int          `json:"batch_size,omitempty"` // Batch size for bulk insert
+	Upsert    bool         `json:"upsert,omitempty"`     // If true, update existing nodes with same ID
+	Timeout   int          `json:"timeout,omitempty"`    // Operation timeout in seconds
+}
+
+// GetNodesOptions represents options for retrieving nodes
+type GetNodesOptions struct {
+	GraphName string                 `json:"graph_name"`
+	IDs       []string               `json:"ids,omitempty"`    // Specific node IDs
+	Labels    []string               `json:"labels,omitempty"` // Filter by labels
+	Filter    map[string]interface{} `json:"filter,omitempty"` // Property filters
+
+	// Return control
+	IncludeProperties bool     `json:"include_properties"` // Whether to include properties
+	IncludeMetadata   bool     `json:"include_metadata"`   // Whether to include metadata
+	Fields            []string `json:"fields,omitempty"`   // Specific fields to retrieve
+	Limit             int      `json:"limit,omitempty"`    // Maximum results
+}
+
+// DeleteNodesOptions represents options for deleting nodes
+type DeleteNodesOptions struct {
+	GraphName  string                 `json:"graph_name"`
+	IDs        []string               `json:"ids,omitempty"`         // Specific node IDs
+	Filter     map[string]interface{} `json:"filter,omitempty"`      // Filter for bulk delete
+	DeleteRels bool                   `json:"delete_rels,omitempty"` // Whether to delete connected relationships
+	DryRun     bool                   `json:"dry_run"`               // Preview what would be deleted
+	BatchSize  int                    `json:"batch_size,omitempty"`
+	Timeout    int                    `json:"timeout,omitempty"`
+}
+
+// AddRelationshipsOptions represents options for adding relationships
+type AddRelationshipsOptions struct {
+	GraphName     string               `json:"graph_name"`
+	Relationships []*GraphRelationship `json:"relationships"`
+	BatchSize     int                  `json:"batch_size,omitempty"`
+	Upsert        bool                 `json:"upsert,omitempty"`
+	CreateNodes   bool                 `json:"create_nodes,omitempty"` // Create nodes if they don't exist
+	Timeout       int                  `json:"timeout,omitempty"`
+}
+
+// GetRelationshipsOptions represents options for retrieving relationships
+type GetRelationshipsOptions struct {
+	GraphName string                 `json:"graph_name"`
+	IDs       []string               `json:"ids,omitempty"`       // Specific relationship IDs
+	Types     []string               `json:"types,omitempty"`     // Filter by relationship types
+	NodeIDs   []string               `json:"node_ids,omitempty"`  // Filter by connected nodes
+	Direction string                 `json:"direction,omitempty"` // "IN", "OUT", "BOTH"
+	Filter    map[string]interface{} `json:"filter,omitempty"`    // Property filters
+
+	// Return control
+	IncludeProperties bool     `json:"include_properties"`
+	IncludeMetadata   bool     `json:"include_metadata"`
+	Fields            []string `json:"fields,omitempty"`
+	Limit             int      `json:"limit,omitempty"`
+}
+
+// DeleteRelationshipsOptions represents options for deleting relationships
+type DeleteRelationshipsOptions struct {
+	GraphName string                 `json:"graph_name"`
+	IDs       []string               `json:"ids,omitempty"`
+	Filter    map[string]interface{} `json:"filter,omitempty"`
+	DryRun    bool                   `json:"dry_run"`
+	BatchSize int                    `json:"batch_size,omitempty"`
+	Timeout   int                    `json:"timeout,omitempty"`
+}
+
+// DynamicGraphSchema represents a discovered/dynamic graph schema
+type DynamicGraphSchema struct {
+	NodeLabels        []string                  `json:"node_labels"`
+	RelationshipTypes []string                  `json:"relationship_types"`
+	NodeProperties    map[string][]PropertyInfo `json:"node_properties"` // label -> property info
+	RelProperties     map[string][]PropertyInfo `json:"rel_properties"`  // type -> property info
+	Constraints       []SchemaConstraint        `json:"constraints"`
+	Indexes           []SchemaIndex             `json:"indexes"`
+	Statistics        *GraphSchemaStats         `json:"statistics,omitempty"`
+}
+
+// PropertyInfo represents information about a property
+type PropertyInfo struct {
+	Name         string        `json:"name"`
+	Type         string        `json:"type"` // "string", "int", "float", "bool", "array", "object"
+	Nullable     bool          `json:"nullable"`
+	SampleValues []interface{} `json:"sample_values,omitempty"`
+	Count        int64         `json:"count,omitempty"`      // Number of entities with this property
+	Uniqueness   float64       `json:"uniqueness,omitempty"` // Uniqueness ratio (0-1)
+}
+
+// GraphSchemaStats represents statistics about the graph schema
+type GraphSchemaStats struct {
+	TotalNodes         int64                  `json:"total_nodes"`
+	TotalRelationships int64                  `json:"total_relationships"`
+	NodeCounts         map[string]int64       `json:"node_counts"` // label -> count
+	RelCounts          map[string]int64       `json:"rel_counts"`  // type -> count
+	AvgDegree          float64                `json:"avg_degree"`
+	MaxDegree          int                    `json:"max_degree"`
+	Density            float64                `json:"density"`
+	ExtraStats         map[string]interface{} `json:"extra_stats,omitempty"`
+}
+
+// CreateIndexOptions represents options for creating indexes
+type CreateIndexOptions struct {
+	GraphName   string                 `json:"graph_name"`
+	IndexType   string                 `json:"index_type"`       // "BTREE", "FULLTEXT", "VECTOR", etc.
+	Target      string                 `json:"target"`           // "NODE" or "RELATIONSHIP"
+	Labels      []string               `json:"labels,omitempty"` // Node labels or relationship types
+	Properties  []string               `json:"properties"`       // Properties to index
+	Name        string                 `json:"name,omitempty"`   // Index name
+	Config      map[string]interface{} `json:"config,omitempty"` // Index-specific configuration
+	IfNotExists bool                   `json:"if_not_exists"`    // Don't error if index already exists
+}
+
+// DropIndexOptions represents options for dropping indexes
+type DropIndexOptions struct {
+	GraphName string `json:"graph_name"`
+	Name      string `json:"name"`      // Index name
+	IfExists  bool   `json:"if_exists"` // Don't error if index doesn't exist
+}
+
+// GraphStats represents statistics about a graph (similar to VectorStoreStats)
+type GraphStats struct {
+	TotalNodes         int64                  `json:"total_nodes"`
+	TotalRelationships int64                  `json:"total_relationships"`
+	NodeLabels         []string               `json:"node_labels"`
+	RelationshipTypes  []string               `json:"relationship_types"`
+	AvgDegree          float64                `json:"avg_degree"`
+	MaxDegree          int                    `json:"max_degree"`
+	Density            float64                `json:"density"`
+	StorageSize        int64                  `json:"storage_size_bytes,omitempty"`
+	MemoryUsage        int64                  `json:"memory_usage_bytes,omitempty"`
+	IndexCount         int                    `json:"index_count,omitempty"`
+	ExtraStats         map[string]interface{} `json:"extra_stats,omitempty"`
+}
+
+// GraphBackupOptions represents options for creating graph backups
+type GraphBackupOptions struct {
+	GraphName   string                 `json:"graph_name"`
+	Format      string                 `json:"format,omitempty"` // "json", "gexf", "graphml", "cypher", etc.
+	Compress    bool                   `json:"compress"`
+	Filter      map[string]interface{} `json:"filter,omitempty"` // Filter what to backup
+	ExtraParams map[string]interface{} `json:"extra_params,omitempty"`
+}
+
+// GraphRestoreOptions represents options for restoring graph data
+type GraphRestoreOptions struct {
+	GraphName   string                 `json:"graph_name"`
+	Format      string                 `json:"format,omitempty"` // "json", "gexf", "graphml", "cypher", etc.
+	Compress    bool                   `json:"compress"`         // whether to compress the backup file
+	Force       bool                   `json:"force"`            // Whether to overwrite existing data
+	CreateGraph bool                   `json:"create_graph"`     // Whether to create graph if it doesn't exist
+	ExtraParams map[string]interface{} `json:"extra_params,omitempty"`
+}
+
+// ==== GraphRag Types =====
+
+// ConverterStatus represents the status of the conversion
+type ConverterStatus string
+
+// ConverterStatus values
+const (
+	ConverterStatusSuccess ConverterStatus = "success"
+	ConverterStatusError   ConverterStatus = "error"
+	ConverterStatusPending ConverterStatus = "pending"
+)
+
+// ConvertResult represents the result of a document conversion operation
+type ConvertResult struct {
+	Text     string                 `json:"text"`     // Converted text content
+	Metadata map[string]interface{} `json:"metadata"` // Additional metadata from conversion (page mappings, structure info, etc.)
+}
+
+// SearcherStatus represents the status of the search
+type SearcherStatus string
+
+// SearchStatus values
+const (
+	SearchStatusSuccess SearcherStatus = "success"
+	SearchStatusError   SearcherStatus = "error"
+	SearchStatusPending SearcherStatus = "pending"
+)
+
+// SearcherType represents the type of the searcher
+type SearcherType string
+
+// SearcherType values
+const (
+	SearcherTypeVector SearcherType = "vector"
+	SearcherTypeGraph  SearcherType = "graph"
+	SearcherTypeHybrid SearcherType = "hybrid"
+)
+
+// ===== Reranker Types =====
+
+// RerankerStatus represents the status of the reranker
+type RerankerStatus string
+
+// RerankerStatus values
+const (
+	RerankerStatusSuccess RerankerStatus = "success"
+	RerankerStatusError   RerankerStatus = "error"
+	RerankerStatusPending RerankerStatus = "pending"
+)
+
+// RerankerPayload represents the payload of the reranker
+type RerankerPayload struct {
+	Status   RerankerStatus `json:"status"`
+	Message  string         `json:"message"`
+	Progress float64        `json:"progress"`
+}
+
+// ===== Scorer Types =====
+
+// ScoreStatus represents the status of the scorer
+type ScoreStatus string
+
+// ScoreStatus values
+const (
+	ScoreStatusSuccess ScoreStatus = "success"
+	ScoreStatusError   ScoreStatus = "error"
+	ScoreStatusPending ScoreStatus = "pending"
+)
+
+// ScorePayload represents the payload of the scorer
+type ScorePayload struct {
+	Status   ScoreStatus `json:"status"`
+	Message  string      `json:"message"`
+	Progress float64     `json:"progress"`
+}
+
+// ===== Weight Types =====
+
+// WeightStatus represents the status of the weight
+type WeightStatus string
+
+// WeightStatus values
+const (
+	WeightStatusSuccess WeightStatus = "success"
+	WeightStatusError   WeightStatus = "error"
+	WeightStatusPending WeightStatus = "pending"
+)
+
+// WeightPayload represents the payload of the weight
+type WeightPayload struct {
+	Status   WeightStatus `json:"status"`
+	Message  string       `json:"message"`
+	Progress float64      `json:"progress"`
+}
+
+// ===== Vote Types =====
+
+// VoteStatus represents the status of the vote
+type VoteStatus string
+
+// VoteStatus values
+const (
+	VoteStatusSuccess VoteStatus = "success"
+	VoteStatusError   VoteStatus = "error"
+	VoteStatusPending VoteStatus = "pending"
+)
+
+// VotePayload represents the payload of the vote
+type VotePayload struct {
+	Status   VoteStatus `json:"status"`
+	Message  string     `json:"message"`
+	Progress float64    `json:"progress"`
+}
+
+// ===== Fetcher Types =====
+
+// FetcherStatus represents the status of the fetcher
+type FetcherStatus string
+
+// FetcherStatus values
+const (
+	FetcherStatusSuccess FetcherStatus = "success"
+	FetcherStatusError   FetcherStatus = "error"
+	FetcherStatusPending FetcherStatus = "pending"
+)
+
+// FetcherPayload represents the payload of the fetcher
+type FetcherPayload struct {
+	Status   FetcherStatus `json:"status"`
+	Message  string        `json:"message"`
+	Progress float64       `json:"progress"`
+	Bytes    int64         `json:"bytes"`
+	URL      string        `json:"url"`
+}
+
+// ConverterPayload represents the payload of the conversion
+type ConverterPayload struct {
+	Status   ConverterStatus `json:"status"`
+	Message  string          `json:"message"`
+	Progress float64         `json:"progress"`
+}
+
+// SearcherPayload represents the payload of the search
+type SearcherPayload struct {
+	Status   SearcherStatus `json:"status"`
+	Message  string         `json:"message"`
+	Progress float64        `json:"progress"`
+}
+
+// ChatMessage is a message in a chat
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// Options represents the options for GraphRag
+type Options struct {
+	// VectorStore is the vector store to use for storing and searching documents
+	VectorStore VectorStore
+
+	// GraphStore is the graph store to use for storing and searching relationships (Optional)
+	GraphStore GraphStore
+}
+
+// UpsertOptions represents the options for adding documents to the graph
+type UpsertOptions struct {
+	// Chunking is the chunking model to use for chunking documents
+	Chunking         Chunking
+	ChunkingOptions  *ChunkingOptions // Chunking options (Optional)
+	ChunkingProgress ChunkingProgress // Chunking progress callback (Optional)
+
+	// Embedding is the embedding model to use for embedding documents
+	Embedding         Embedding
+	EmbeddingProgress EmbeddingProgress // Embedding progress callback (Optional)
+
+	// Extraction is the extraction model to use for extracting documents (Optional)
+	Extraction         Extraction
+	ExtractionProgress ExtractionProgress // Extraction progress callback (Optional)
+
+	// ExtractionEmbedding is the embedding model to use for embedding extracted documents (Optional, default is the same as Embedding)
+	ExtractionEmbedding         Embedding
+	ExtractionEmbeddingProgress EmbeddingProgress // Extraction embedding progress callback (Optional)
+
+	// Fetcher is the fetcher to use for fetching documents from URLs (Optional)
+	Fetcher Fetcher
+
+	// Converter is the converter to use for converting documents to text (Optional)
+	Converter Converter
+
+	// Metadata is the metadata to use for the document (Optional)
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// QueryOptions represents the options for querying the graph
+type QueryOptions struct {
+	CollectionID string `json:"collection_id"`
+	DocumentID   string `json:"document_id"`
+
+	// Query is the query to use for searching documents
+	Query string `json:"query"` // Query or History at least one of them is required
+
+	// History is the history of messages to use for searching documents
+	History []ChatMessage `json:"history"` // History or Query at least one of them is required
+
+	// Filter is the filter to use for searching documents (Optional)
+	Filter map[string]interface{} `json:"filter,omitempty"`
+
+	// Embedding is the embedding model to use for embedding documents
+	Embedding         Embedding
+	EmbeddingProgress EmbeddingProgress // Embedding progress callback (Optional)
+
+	// Extraction is the extraction model to use for extracting documents (Optional)
+	Extraction         Extraction
+	ExtractionProgress ExtractionProgress // Extraction progress callback (Optional)
+
+	// ExtractionEmbedding is the embedding model to use for embedding extracted documents (Optional, default is the same as Embedding)
+	ExtractionEmbedding         Embedding
+	ExtractionEmbeddingProgress EmbeddingProgress // Extraction embedding progress callback (Optional)
+
+	// Fetcher is the fetcher to use for fetching documents from URLs (Optional)
+	Fetcher Fetcher
+
+	// Converter is the converter to use for converting documents to text (Optional)
+	Converter Converter
+
+	// Reranker is the reranker to use for reranking documents (Optional)
+	Reranker Reranker
+
+	// Searcher is the searcher to use for searching documents (Optional)
+	Searcher Searcher
+}
+
+// Collection represents a collection of documents
+type Collection struct {
+	ID               string                 `json:"id"`
+	Metadata         map[string]interface{} `json:"metadata"`
+	VectorConfig     *VectorStoreConfig     `json:"vector_config"`
+	GraphStoreConfig *GraphStoreConfig      `json:"graph_store_config"`
+}
+
+// Segment represents a segment of a document
+type Segment struct {
+	CollectionID string                 `json:"collection_id"`
+	DocumentID   string                 `json:"document_id"`
+	ID           string                 `json:"id"`
+	Text         string                 `json:"text"`
+	Graph        string                 `json:"graph"`
+	Parents      []string               `json:"parents"`
+	Children     []string               `json:"children"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	CreatedAt    time.Time              `json:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+	Version      int                    `json:"version"`
+	Weight       float64                `json:"weight"`
+	Score        float64                `json:"score"`
+	Vote         int                    `json:"vote"`
+}
+
+// SegmentText represents a segment of a document
+type SegmentText struct {
+	ID   string `json:"id,omitempty"`
+	Text string `json:"text"`
+}
+
+// SegmentVote represents a vote for a segment
+type SegmentVote struct {
+	ID   string `json:"id"`
+	Vote int    `json:"vote,omitempty"`
+}
+
+// SegmentScore represents a score for a segment
+type SegmentScore struct {
+	ID    string  `json:"id"`
+	Score float64 `json:"score,omitempty"`
+}
+
+// SegmentWeight represents a weight for a segment
+type SegmentWeight struct {
+	ID     string  `json:"id"`
+	Weight float64 `json:"weight,omitempty"`
 }
