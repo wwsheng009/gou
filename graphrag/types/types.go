@@ -157,7 +157,13 @@ type Chunk struct {
 	// Position information (only one should be populated based on content type)
 	TextPos  *TextPosition  `json:"text_position,omitempty"`  // For text, code, etc.
 	MediaPos *MediaPosition `json:"media_position,omitempty"` // For PDF, video, audio, etc.
+
+	// Extracted text
+	Extracted *ExtractionResult `json:"extracted,omitempty"` // Extracted text from the chunk
 }
+
+// Embeddings is a slice of EmbeddingResult
+type Embeddings []*EmbeddingResult
 
 // ChunkingOptions represents options for chunking
 type ChunkingOptions struct {
@@ -495,12 +501,29 @@ type SearchResult struct {
 	MinScore    float64                 `json:"min_score,omitempty"`   // Lowest score in results
 }
 
-// VectorStoreConfig represents configuration for vector store
+// VectorStoreConfig represents configuration for vector store connection
 type VectorStoreConfig struct {
-	// Vector Configuration
-	Dimension int            `json:"dimension"`  // Vector dimension (e.g., 1536 for OpenAI embeddings)
-	Distance  DistanceMetric `json:"distance"`   // Distance metric
-	IndexType IndexType      `json:"index_type"` // Index type
+	// Database Connection Configuration
+	DatabaseURL    string                 `json:"database_url,omitempty"`    // Database connection URL
+	ConnectionPool int                    `json:"connection_pool,omitempty"` // Connection pool size
+	Timeout        int                    `json:"timeout,omitempty"`         // Operation timeout in seconds
+	ExtraParams    map[string]interface{} `json:"extra_params,omitempty"`    // Database-specific parameters (host, port, api_key, etc.)
+}
+
+// Validate validates the vector store connection configuration
+func (c *VectorStoreConfig) Validate() error {
+	// Basic validation for connection config
+	// Most validation will be database-specific and handled by individual drivers
+	return nil
+}
+
+// CreateCollectionOptions represents configuration for creating a collection
+type CreateCollectionOptions struct {
+	// Collection Basic Configuration
+	CollectionName string         `json:"collection_name"` // Collection/Table name
+	Dimension      int            `json:"dimension"`       // Vector dimension (e.g., 1536 for OpenAI embeddings)
+	Distance       DistanceMetric `json:"distance"`        // Distance metric
+	IndexType      IndexType      `json:"index_type"`      // Index type
 
 	// Index Parameters (for HNSW)
 	M              int `json:"m,omitempty"`               // Number of bidirectional links for each node (HNSW)
@@ -517,18 +540,14 @@ type VectorStoreConfig struct {
 	SparseVectorName    string `json:"sparse_vector_name,omitempty"`    // Named vector for sparse vectors (default: "sparse")
 
 	// Storage Configuration
-	CollectionName string `json:"collection_name"`        // Collection/Table name
-	PersistPath    string `json:"persist_path,omitempty"` // Path for persistent storage
+	PersistPath string `json:"persist_path,omitempty"` // Path for persistent storage
 
-	// Database-specific settings
-	DatabaseURL    string                 `json:"database_url,omitempty"`    // Database connection URL
-	ConnectionPool int                    `json:"connection_pool,omitempty"` // Connection pool size
-	Timeout        int                    `json:"timeout,omitempty"`         // Operation timeout in seconds
-	ExtraParams    map[string]interface{} `json:"extra_params,omitempty"`    // Database-specific parameters
+	// Collection-specific settings
+	ExtraParams map[string]interface{} `json:"extra_params,omitempty"` // Collection-specific parameters
 }
 
-// Validate validates the vector store configuration
-func (c *VectorStoreConfig) Validate() error {
+// Validate validates the collection creation configuration
+func (c *CreateCollectionOptions) Validate() error {
 	if !c.IndexType.IsValid() {
 		return fmt.Errorf("invalid index type: %s, supported types: %v", c.IndexType, GetSupportedIndexTypes())
 	}
@@ -1943,21 +1962,25 @@ type Options struct {
 // UpsertOptions represents the options for adding documents to the graph
 type UpsertOptions struct {
 	// Chunking is the chunking model to use for chunking documents
-	Chunking         Chunking
-	ChunkingOptions  *ChunkingOptions // Chunking options (Optional)
-	ChunkingProgress ChunkingProgress // Chunking progress callback (Optional)
+	Chunking        Chunking
+	ChunkingOptions *ChunkingOptions // Chunking options (Optional)
+	// ChunkingProgress ChunkingProgress // Chunking progress callback (Optional)
 
 	// Embedding is the embedding model to use for embedding documents
-	Embedding         Embedding
-	EmbeddingProgress EmbeddingProgress // Embedding progress callback (Optional)
+	Embedding Embedding
+	// EmbeddingProgress EmbeddingProgress // Embedding progress callback (Optional)
 
 	// Extraction is the extraction model to use for extracting documents (Optional)
-	Extraction         Extraction
-	ExtractionProgress ExtractionProgress // Extraction progress callback (Optional)
+	Extraction Extraction
+
+	// Progress is the progress callback for the upsert
+	Progress UpsertProgress
+
+	// ExtractionProgress ExtractionProgress // Extraction progress callback (Optional)
 
 	// ExtractionEmbedding is the embedding model to use for embedding extracted documents (Optional, default is the same as Embedding)
-	ExtractionEmbedding         Embedding
-	ExtractionEmbeddingProgress EmbeddingProgress // Extraction embedding progress callback (Optional)
+	// ExtractionEmbedding         Embedding
+	// ExtractionEmbeddingProgress EmbeddingProgress // Extraction embedding progress callback (Optional)
 
 	// Fetcher is the fetcher to use for fetching documents from URLs (Optional)
 	Fetcher Fetcher
@@ -1965,8 +1988,43 @@ type UpsertOptions struct {
 	// Converter is the converter to use for converting documents to text (Optional)
 	Converter Converter
 
+	// GraphName is the graph name to use for storing the document (Optional)
+	GraphName string `json:"graph_name,omitempty"`
+
+	// DocID is the document ID to use for tracking, if not provided, will auto-generate (Optional)
+	DocID string `json:"doc_id,omitempty"`
+
 	// Metadata is the metadata to use for the document (Optional)
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// UpsertProgressType represents the type of the progress
+type UpsertProgressType string
+
+// UpsertProgressType values
+const (
+	UpsertProgressTypeConverter  UpsertProgressType = "converter"
+	UpsertProgressTypeChunking   UpsertProgressType = "chunking"
+	UpsertProgressTypeEmbedding  UpsertProgressType = "embedding"
+	UpsertProgressTypeExtraction UpsertProgressType = "extraction"
+	UpsertProgressTypeFetcher    UpsertProgressType = "fetcher"
+)
+
+// UpsertProgressPayload represents the progress of the upsert
+type UpsertProgressPayload struct {
+	ID       string                 `json:"id"`       // ID of the request
+	Progress float64                `json:"progress"` // 0 - 100
+	Type     UpsertProgressType     `json:"type"`     // "converter", "chunking", "embedding", "extraction", "fetcher"
+	Data     map[string]interface{} `json:"data"`     // Data to display
+}
+
+// UpsertCallback is the callback for the upsert progress
+type UpsertCallback struct {
+	Converter  ConverterProgress
+	Chunking   ChunkingProgress
+	Embedding  EmbeddingProgress
+	Extraction ExtractionProgress
+	Fetcher    FetcherProgress
 }
 
 // QueryOptions represents the options for querying the graph
@@ -2010,28 +2068,44 @@ type QueryOptions struct {
 
 // Collection represents a collection of documents
 type Collection struct {
-	ID               string                 `json:"id"`
-	Metadata         map[string]interface{} `json:"metadata"`
-	VectorConfig     *VectorStoreConfig     `json:"vector_config"`
-	GraphStoreConfig *GraphStoreConfig      `json:"graph_store_config"`
+	ID               string                   `json:"id"`
+	Metadata         map[string]interface{}   `json:"metadata"`
+	VectorConfig     *VectorStoreConfig       `json:"vector_config"`     // Connection configuration
+	CollectionConfig *CreateCollectionOptions `json:"collection_config"` // Collection creation configuration
+	GraphStoreConfig *GraphStoreConfig        `json:"graph_store_config"`
+}
+
+// CollectionInfo represents the information of a collection
+type CollectionInfo struct {
+	ID       string                   `json:"id"`
+	Metadata map[string]interface{}   `json:"metadata"`
+	Config   *CreateCollectionOptions `json:"config"`
+}
+
+// CollectionConfig represents the configuration for a collection
+type CollectionConfig struct {
+	ID       string                   `json:"id"`
+	Metadata map[string]interface{}   `json:"metadata"`
+	Config   *CreateCollectionOptions `json:"config"`
 }
 
 // Segment represents a segment of a document
 type Segment struct {
-	CollectionID string                 `json:"collection_id"`
-	DocumentID   string                 `json:"document_id"`
-	ID           string                 `json:"id"`
-	Text         string                 `json:"text"`
-	Graph        string                 `json:"graph"`
-	Parents      []string               `json:"parents"`
-	Children     []string               `json:"children"`
-	Metadata     map[string]interface{} `json:"metadata"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
-	Version      int                    `json:"version"`
-	Weight       float64                `json:"weight"`
-	Score        float64                `json:"score"`
-	Vote         int                    `json:"vote"`
+	CollectionID  string                 `json:"collection_id"`
+	DocumentID    string                 `json:"document_id"`
+	ID            string                 `json:"id"`
+	Text          string                 `json:"text"`
+	Nodes         []GraphNode            `json:"nodes"`
+	Relationships []GraphRelationship    `json:"relationships"`
+	Parents       []string               `json:"parents"`
+	Children      []string               `json:"children"`
+	Metadata      map[string]interface{} `json:"metadata"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
+	Version       int                    `json:"version"`
+	Weight        float64                `json:"weight"`
+	Score         float64                `json:"score"`
+	Vote          int                    `json:"vote"`
 }
 
 // SegmentText represents a segment of a document
@@ -2056,4 +2130,48 @@ type SegmentScore struct {
 type SegmentWeight struct {
 	ID     string  `json:"id"`
 	Weight float64 `json:"weight,omitempty"`
+}
+
+// ===== Segment Pagination Types =====
+
+// ListSegmentsOptions represents options for listing segments with pagination
+type ListSegmentsOptions struct {
+	Filter  map[string]interface{} `json:"filter,omitempty"`   // Metadata filter (vote, score, weight, etc.)
+	Limit   int                    `json:"limit,omitempty"`    // Number of segments per page (default: 100)
+	Offset  int                    `json:"offset,omitempty"`   // Offset for pagination
+	OrderBy []string               `json:"order_by,omitempty"` // Fields to order by (score, weight, vote, created_at, etc.)
+	Fields  []string               `json:"fields,omitempty"`   // Specific fields to retrieve
+
+	// Include options
+	IncludeNodes         bool `json:"include_nodes"`         // Whether to include graph nodes
+	IncludeRelationships bool `json:"include_relationships"` // Whether to include graph relationships
+	IncludeMetadata      bool `json:"include_metadata"`      // Whether to include segment metadata
+}
+
+// PaginatedSegmentsResult represents paginated segment query results
+type PaginatedSegmentsResult struct {
+	Segments   []Segment `json:"segments"`
+	Total      int64     `json:"total"`       // Total number of matching segments (if supported)
+	HasMore    bool      `json:"has_more"`    // Whether there are more pages
+	NextOffset int       `json:"next_offset"` // Offset for next page
+}
+
+// ScrollSegmentsOptions represents options for scrolling through segments (iterator-style)
+type ScrollSegmentsOptions struct {
+	Filter    map[string]interface{} `json:"filter,omitempty"`     // Metadata filter (vote, score, weight, etc.)
+	BatchSize int                    `json:"batch_size,omitempty"` // Number of segments per batch (default: 100)
+	ScrollID  string                 `json:"scroll_id,omitempty"`  // Scroll ID for continuing pagination
+	Fields    []string               `json:"fields,omitempty"`     // Specific fields to retrieve
+
+	// Include options
+	IncludeNodes         bool `json:"include_nodes"`         // Whether to include graph nodes
+	IncludeRelationships bool `json:"include_relationships"` // Whether to include graph relationships
+	IncludeMetadata      bool `json:"include_metadata"`      // Whether to include segment metadata
+}
+
+// SegmentScrollResult represents scroll-based segment query results
+type SegmentScrollResult struct {
+	Segments []Segment `json:"segments"`
+	ScrollID string    `json:"scroll_id,omitempty"` // ID for next scroll request
+	HasMore  bool      `json:"has_more"`            // Whether there are more results
 }

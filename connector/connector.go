@@ -3,6 +3,7 @@ package connector
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/connector/database"
@@ -19,26 +20,45 @@ var Connectors = map[string]Connector{}
 // AIConnectors the AI connectors
 var AIConnectors = []Option{}
 
-// Load a connector from source
-func Load(file string, id string) (Connector, error) {
+var rwlock sync.RWMutex // Use RWMutex for better concurrency
 
-	dsl := DSL{}
+// LoadSync load connector sync
+func LoadSync(file string, id string) (Connector, error) {
+	rwlock.Lock()
+	defer rwlock.Unlock()
+	return Load(file, id)
+}
+
+// LoadSourceSync load connector sync
+func LoadSourceSync(source []byte, id string, file string) (Connector, error) {
+	rwlock.Lock()
+	defer rwlock.Unlock()
+	return LoadSource(source, id, file)
+}
+
+// Load a connector from file
+func Load(file string, id string) (Connector, error) {
 	data, err := application.App.Read(file)
 	if err != nil {
 		return nil, err
 	}
+	return LoadSource(data, id, file)
+}
 
-	err = application.Parse(file, data, &dsl)
+// LoadSource load a connector from source
+func LoadSource(source []byte, id string, file string) (Connector, error) {
+	dsl := DSL{}
+	err := application.Parse(file, source, &dsl)
 	if err != nil {
 		return nil, err
 	}
 
-	c, err := make(dsl.Type)
+	c, err := makeConnector(dsl.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	err = c.Register(file, id, data)
+	err = c.Register(file, id, source)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +84,7 @@ func Load(file string, id string) (Connector, error) {
 
 // New create a new connector
 func New(typ string, id string, dsl []byte) (Connector, error) {
-	c, err := make(typ)
+	c, err := makeConnector(typ)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +117,7 @@ func Remove(id string) error {
 	return connector.Close()
 }
 
-func make(typ string) (Connector, error) {
+func makeConnector(typ string) (Connector, error) {
 
 	t, has := types[typ]
 	if !has {

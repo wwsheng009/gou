@@ -11,7 +11,7 @@ import (
 // Only handles vectors, text-to-vector conversion is done externally via EmbeddingFunction
 type VectorStore interface {
 	// Collection Management
-	CreateCollection(ctx context.Context, config *VectorStoreConfig) error
+	CreateCollection(ctx context.Context, opts *CreateCollectionOptions) error
 	ListCollections(ctx context.Context) ([]string, error)
 	DropCollection(ctx context.Context, collectionName string) error
 	CollectionExists(ctx context.Context, collectionName string) (bool, error)
@@ -48,7 +48,7 @@ type VectorStore interface {
 	Restore(ctx context.Context, reader io.Reader, opts *RestoreOptions) error
 
 	// Connection Management
-	Connect(ctx context.Context, config VectorStoreConfig) error
+	Connect(ctx context.Context, config ...VectorStoreConfig) error
 	Disconnect(ctx context.Context) error
 	IsConnected() bool
 	Close() error
@@ -105,7 +105,7 @@ type ExtractionProgress func(status ExtractionStatus, payload ExtractionPayload)
 // Similar to VectorStore design - focused on core operations with flexible data structures
 type GraphStore interface {
 	// Connection Management
-	Connect(ctx context.Context, config GraphStoreConfig) error
+	Connect(ctx context.Context, config ...GraphStoreConfig) error
 	Disconnect(ctx context.Context) error
 	IsConnected() bool
 	Close() error
@@ -158,10 +158,10 @@ type Logger interface {
 // GraphRag defines the interface for GraphRag
 type GraphRag interface {
 	// Collection Management
-	CreateCollection(ctx context.Context, collection Collection) (string, error)             // Create a new collection
-	RemoveCollection(ctx context.Context, id string) (bool, error)                           // Remove a collection
-	CollectionExists(ctx context.Context, id string) (bool, error)                           // Check if a collection exists
-	GetCollections(ctx context.Context, filter map[string]interface{}) ([]Collection, error) // Get collections with optional metadata filtering
+	CreateCollection(ctx context.Context, config CollectionConfig) (string, error)               // Create a new collection
+	RemoveCollection(ctx context.Context, id string) (bool, error)                               // Remove a collection
+	CollectionExists(ctx context.Context, id string) (bool, error)                               // Check if a collection exists
+	GetCollections(ctx context.Context, filter map[string]interface{}) ([]CollectionInfo, error) // Get collections with optional metadata filtering
 
 	// Document Management
 	AddFile(ctx context.Context, file string, options *UpsertOptions) (string, error)            // Add a file to a collection
@@ -171,16 +171,19 @@ type GraphRag interface {
 	RemoveDocs(ctx context.Context, ids []string) (int, error)                                   // Remove documents by IDs
 
 	// Segment Management
-	AddSegments(ctx context.Context, id string, segmentTexts []SegmentText, options *UpsertOptions) (int, error) // Add segments to a collection manually
-	UpdateSegments(ctx context.Context, segmentTexts []SegmentText, options *UpsertOptions) (int, error)         // Update segments manually
-	RemoveSegments(ctx context.Context, segmentIDs []string) (int, error)                                        // Remove segments by IDs
-	GetSegments(ctx context.Context, id string) ([]Segment, error)                                               // Get all segments of a collection
-	GetSegment(ctx context.Context, segmentID string) (*Segment, error)                                          // Get a single segment by ID
+	AddSegments(ctx context.Context, docID string, segmentTexts []SegmentText, options *UpsertOptions) ([]string, error) // Add segments to a document manually, return segment IDs
+	UpdateSegments(ctx context.Context, segmentTexts []SegmentText, options *UpsertOptions) (int, error)                 // Update segments manually, return updated count
+	RemoveSegments(ctx context.Context, segmentIDs []string) (int, error)                                                // Remove segments by SegmentIDs, return removed count
+	RemoveSegmentsByDocID(ctx context.Context, docID string) (int, error)                                                // Remove all segments of a document, return removed count
+	GetSegments(ctx context.Context, segmentIDs []string) ([]Segment, error)                                             // Get segments by IDs, return segments
+	GetSegment(ctx context.Context, segmentID string) (*Segment, error)                                                  // Get a single segment by ID, return segment
+	ListSegments(ctx context.Context, docID string, options *ListSegmentsOptions) (*PaginatedSegmentsResult, error)      // List segments with pagination, return segments
+	ScrollSegments(ctx context.Context, docID string, options *ScrollSegmentsOptions) (*SegmentScrollResult, error)      // Scroll segments with iterator-style pagination, return segments
 
 	// Segment Voting, Scoring, Weighting
-	Vote(ctx context.Context, segments []SegmentVote, callback ...VoteProgress) ([]SegmentVote, error)         // Vote for segments
-	Score(ctx context.Context, segments []SegmentScore, callback ...ScoreProgress) ([]SegmentScore, error)     // Score for segments
-	Weight(ctx context.Context, segments []SegmentWeight, callback ...WeightProgress) ([]SegmentWeight, error) // Weight for segments
+	UpdateVote(ctx context.Context, segments []SegmentVote) (int, error)     // Vote for segments, return updated count
+	UpdateScore(ctx context.Context, segments []SegmentScore) (int, error)   // Score for segments, return updated count
+	UpdateWeight(ctx context.Context, segments []SegmentWeight) (int, error) // Weight for segments, return updated count
 
 	// Search Management
 	Search(ctx context.Context, options *QueryOptions, callback ...SearcherProgress) ([]Segment, error)                  // Search for segments
@@ -213,24 +216,24 @@ type Reranker interface {
 
 // Fetcher interface is used to fetch URLs
 type Fetcher interface {
-	Fetch(ctx context.Context, url string, callback ...FetcherProgress) (string, error)
+	Fetch(ctx context.Context, url string, callback ...FetcherProgress) (string, string, error)
 }
 
 // Score interface is used to score segments
 type Score interface {
-	Score(ctx context.Context, segments []SegmentScore, callback ...ScoreProgress) ([]SegmentScore, error)
+	Score(ctx context.Context, segments []Segment, callback ...ScoreProgress) ([]SegmentScore, error)
 	Name() string
 }
 
 // Weight interface is used to weight segments
 type Weight interface {
-	Weight(ctx context.Context, segments []SegmentWeight) ([]SegmentWeight, error)
+	Weight(ctx context.Context, segments []Segment) ([]SegmentWeight, error)
 	Name() string
 }
 
 // Voter interface is used to vote segments
 type Voter interface {
-	Vote(ctx context.Context, segments []SegmentVote) ([]SegmentVote, error)
+	Vote(ctx context.Context, segments []Segment) ([]SegmentVote, error)
 	Name() string
 }
 
@@ -254,3 +257,6 @@ type WeightProgress func(status WeightStatus, payload WeightPayload)
 
 // VoteProgress defines the callback function for progress reporting with flexible payload
 type VoteProgress func(status VoteStatus, payload VotePayload)
+
+// UpsertProgress defines the callback function for progress reporting with flexible payload
+type UpsertProgress func(id string, status UpsertProgressType, payload UpsertProgressPayload)
