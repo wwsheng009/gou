@@ -11,10 +11,10 @@ import (
 
 // AddSegments adds segments to a collection manually
 func (g *GraphRag) AddSegments(ctx context.Context, docID string, segmentTexts []types.SegmentText, options *types.UpsertOptions) ([]string, error) {
-	// Step 1: Parse GraphName from docID
-	graphName, _ := utils.ExtractGraphNameFromDocID(docID)
-	if graphName == "" {
-		graphName = "default"
+	// Step 1: Parse CollectionID from docID
+	collectionID, _ := utils.ExtractCollectionIDFromDocID(docID)
+	if collectionID == "" {
+		collectionID = "default"
 	}
 
 	// Step 2: Prepare options by copying and setting necessary fields
@@ -22,11 +22,11 @@ func (g *GraphRag) AddSegments(ctx context.Context, docID string, segmentTexts [
 	if options != nil {
 		*opts = *options
 	}
-	opts.GraphName = graphName
+	opts.CollectionID = collectionID
 	opts.DocID = docID
 
 	// Step 3: Get collection IDs for vector and graph storage
-	collectionIDs, err := utils.GetCollectionIDs(graphName)
+	collectionIDs, err := utils.GetCollectionIDs(collectionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate collection IDs: %w", err)
 	}
@@ -126,7 +126,7 @@ func (g *GraphRag) AddSegments(ctx context.Context, docID string, segmentTexts [
 		ConvertMetadata:                  make(map[string]interface{}),
 		UserMetadata:                     opts.Metadata,
 		VectorCollectionName:             collectionIDs.Vector,
-		CollectionID:                     graphName,
+		CollectionID:                     collectionID,
 		DocID:                            docID,
 		EntityDeduplicationResults:       entityDeduplicationResults,
 		RelationshipDeduplicationResults: relationshipDeduplicationResults,
@@ -282,14 +282,14 @@ func (g *GraphRag) removeAllSegmentMetadataFromStore(ctx context.Context, docID 
 
 	g.Logger.Debugf("Attempting to remove segment metadata for document %s", docID)
 
-	// Parse GraphName from docID to find the right collection
-	graphName, _ := utils.ExtractGraphNameFromDocID(docID)
-	if graphName == "" {
-		graphName = "default"
+	// Parse CollectionID from docID to find the right collection
+	collectionID, _ := utils.ExtractCollectionIDFromDocID(docID)
+	if collectionID == "" {
+		collectionID = "default"
 	}
 
-	// Get collection IDs for this graph
-	collectionIDs, err := utils.GetCollectionIDs(graphName)
+	// Get collection IDs for this collection
+	collectionIDs, err := utils.GetCollectionIDs(collectionID)
 	if err != nil {
 		g.Logger.Warnf("Failed to get collection IDs for document %s: %v", docID, err)
 		return
@@ -357,21 +357,25 @@ func (g *GraphRag) UpdateSegments(ctx context.Context, segmentTexts []types.Segm
 		segmentIDs = append(segmentIDs, segment.ID)
 	}
 
-	docID, graphName, err := g.getDocIDFromExistingSegments(ctx, segmentIDs)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get doc_id from existing segments: %w", err)
-	}
+	// docID, collectionID, err := g.getDocIDFromExistingSegments(ctx, segmentIDs)
+	// if err != nil {
+	// 	return 0, fmt.Errorf("failed to get doc_id from existing segments: %w", err)
+	// }
+
+	// Step 3: Get collection ID and doc ID from options (for update segments)
+	collectionID := options.CollectionID
+	docID := options.DocID
 
 	// Step 3: Prepare options by copying and setting necessary fields
 	opts := &types.UpsertOptions{}
 	if options != nil {
 		*opts = *options
 	}
-	opts.GraphName = graphName
+	opts.CollectionID = collectionID
 	opts.DocID = docID
 
 	// Step 4: Get collection IDs for vector and graph storage
-	collectionIDs, err := utils.GetCollectionIDs(graphName)
+	collectionIDs, err := utils.GetCollectionIDs(collectionID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to generate collection IDs: %w", err)
 	}
@@ -479,7 +483,7 @@ func (g *GraphRag) UpdateSegments(ctx context.Context, segmentTexts []types.Segm
 		ConvertMetadata:                  make(map[string]interface{}),
 		UserMetadata:                     opts.Metadata,
 		VectorCollectionName:             collectionIDs.Vector,
-		CollectionID:                     graphName,
+		CollectionID:                     collectionID,
 		DocID:                            docID,
 		EntityDeduplicationResults:       entityDeduplicationResults,
 		RelationshipDeduplicationResults: relationshipDeduplicationResults,
@@ -561,7 +565,7 @@ func (g *GraphRag) RemoveSegmentsByDocID(ctx context.Context, docID string) (int
 	g.Logger.Infof("Starting to remove all segments for document: %s", docID)
 
 	// Step 1: Parse GraphName from docID
-	graphName, _ := utils.ExtractGraphNameFromDocID(docID)
+	graphName, _ := utils.ExtractCollectionIDFromDocID(docID)
 	if graphName == "" {
 		graphName = "default"
 	}
@@ -656,7 +660,7 @@ func (g *GraphRag) GetSegments(ctx context.Context, segmentIDs []string) ([]type
 	return segments, nil
 }
 
-// ListSegments lists segments of a document with pagination
+// ListSegments lists segments of a document with pagination (deprecated)
 func (g *GraphRag) ListSegments(ctx context.Context, docID string, options *types.ListSegmentsOptions) (*types.PaginatedSegmentsResult, error) {
 	if docID == "" {
 		return nil, fmt.Errorf("docID cannot be empty")
@@ -665,7 +669,7 @@ func (g *GraphRag) ListSegments(ctx context.Context, docID string, options *type
 	g.Logger.Debugf("Listing segments for document: %s", docID)
 
 	// Parse GraphName from docID
-	graphName, _ := utils.ExtractGraphNameFromDocID(docID)
+	graphName, _ := utils.ExtractCollectionIDFromDocID(docID)
 	if graphName == "" {
 		graphName = "default"
 	}
@@ -722,7 +726,7 @@ func (g *GraphRag) ScrollSegments(ctx context.Context, docID string, options *ty
 	g.Logger.Debugf("Scrolling segments for document: %s", docID)
 
 	// Parse GraphName from docID
-	graphName, _ := utils.ExtractGraphNameFromDocID(docID)
+	graphName, _ := utils.ExtractCollectionIDFromDocID(docID)
 	if graphName == "" {
 		graphName = "default"
 	}
@@ -732,10 +736,10 @@ func (g *GraphRag) ScrollSegments(ctx context.Context, docID string, options *ty
 		options = &types.ScrollSegmentsOptions{}
 	}
 
-	// Set default batch size
-	batchSize := options.BatchSize
-	if batchSize <= 0 {
-		batchSize = 100 // Default batch size
+	// Set default limit
+	limit := options.Limit
+	if limit <= 0 {
+		limit = 100 // Default limit
 	}
 
 	// Query segment data from all configured databases with scroll
@@ -743,9 +747,10 @@ func (g *GraphRag) ScrollSegments(ctx context.Context, docID string, options *ty
 		GraphName:            graphName,
 		DocID:                docID,
 		QueryType:            "scroll",
-		BatchSize:            batchSize,
+		BatchSize:            limit,
 		ScrollID:             options.ScrollID,
 		Filter:               options.Filter,
+		OrderBy:              options.OrderBy,
 		Fields:               options.Fields,
 		IncludeNodes:         options.IncludeNodes,
 		IncludeRelationships: options.IncludeRelationships,
@@ -1615,18 +1620,19 @@ func (g *GraphRag) queryChunksFromVectorWithScroll(ctx context.Context, collecti
 		}
 	}
 
-	// Set batch size, using default if not provided
-	batchSize := opts.BatchSize
-	if batchSize <= 0 {
-		batchSize = 100
+	// Set limit, using default if not provided
+	limit := opts.BatchSize
+	if limit <= 0 {
+		limit = 100
 	}
 
 	// Scroll documents
 	scrollOpts := &types.ScrollOptions{
 		CollectionName: collectionName,
 		Filter:         filter,
-		BatchSize:      batchSize,
+		Limit:          limit,
 		ScrollID:       opts.ScrollID,
+		OrderBy:        opts.OrderBy,
 		Fields:         opts.Fields,
 		IncludeVector:  false,
 		IncludePayload: true,

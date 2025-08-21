@@ -66,17 +66,6 @@ func LoadSource(source []byte, id string, file string) (*Model, error) {
 	PrimaryKey := "id"
 	uniqueColumns := []*Column{}
 
-	// Add soft delete column if enabled
-	if mod.MetaData.Option.SoftDeletes {
-		mod.MetaData.Columns = append(mod.MetaData.Columns, Column{
-			Label:    "::Delete At",
-			Name:     "deleted_at",
-			Type:     "timestamp",
-			Comment:  "::Delete At",
-			Nullable: true,
-		})
-	}
-
 	// Add timestamp columns if enabled
 	if mod.MetaData.Option.Timestamps {
 		mod.MetaData.Columns = append(mod.MetaData.Columns,
@@ -97,6 +86,17 @@ func LoadSource(source []byte, id string, file string) (*Model, error) {
 		)
 	}
 
+	// Add soft delete column if enabled
+	if mod.MetaData.Option.SoftDeletes {
+		mod.MetaData.Columns = append(mod.MetaData.Columns, Column{
+			Label:    "::Delete At",
+			Name:     "deleted_at",
+			Type:     "timestamp",
+			Comment:  "::Delete At",
+			Nullable: true,
+		})
+	}
+
 	for i, column := range mod.MetaData.Columns {
 		mod.MetaData.Columns[i].model = mod
 		columns[column.Name] = &mod.MetaData.Columns[i]
@@ -110,27 +110,100 @@ func LoadSource(source []byte, id string, file string) (*Model, error) {
 		}
 	}
 
-	// Process unique indexes
+	// Add permission columns if enabled
+	if mod.MetaData.Option.Permission {
+		mod.MetaData.Columns = append(mod.MetaData.Columns,
+			Column{
+				Label:    "::Created By",
+				Name:     "__yao_created_by",
+				Type:     "string",
+				Comment:  "::Created By User ID",
+				Nullable: true,
+				Length:   128,
+				Index:    true,
+			},
+			Column{
+				Label:    "::Updated By",
+				Name:     "__yao_updated_by",
+				Type:     "string",
+				Comment:  "::Updated By User ID",
+				Nullable: true,
+				Length:   128,
+			},
+			Column{
+				Label:    "::Team ID",
+				Name:     "__yao_team_id",
+				Type:     "string",
+				Comment:  "::Team ID",
+				Nullable: true,
+				Length:   128,
+				Index:    true,
+			},
+			Column{
+				Label:    "::Tenant ID",
+				Name:     "__yao_tenant_id",
+				Type:     "string",
+				Comment:  "::Tenant ID",
+				Nullable: true,
+				Length:   128,
+				Index:    true,
+			},
+			Column{
+				Label:    "::Public Read",
+				Name:     "__yao_public_read",
+				Type:     "boolean",
+				Comment:  "::Public Read Permission",
+				Nullable: false,
+				Default:  false,
+			},
+			Column{
+				Label:    "::Public Write",
+				Name:     "__yao_public_write",
+				Type:     "boolean",
+				Comment:  "::Public Write Permission",
+				Nullable: false,
+				Default:  false,
+			},
+			Column{
+				Label:    "::Inherit From",
+				Name:     "__yao_inherit_from",
+				Type:     "string",
+				Comment:  "::Inherit Permission From Parent Resource ID",
+				Nullable: true,
+				Length:   128,
+			},
+		)
+	}
+
+	// Process unique indexes (avoid duplicates)
+	uniqueColumnMap := map[string]*Column{}
+	for _, col := range uniqueColumns {
+		uniqueColumnMap[col.Name] = col
+	}
+
 	for _, index := range mod.MetaData.Indexes {
 		if strings.ToLower(index.Type) == "unique" {
 			for _, name := range index.Columns {
 				col, has := columns[name]
 				if has {
-					uniqueColumns = append(uniqueColumns, col)
+					uniqueColumnMap[col.Name] = col
 				}
 			}
 		} else if strings.ToLower(index.Type) == "primary" {
 			for _, name := range index.Columns {
 				col, has := columns[name]
 				if has {
-					//防止主键被后面的设置覆盖
-					if PrimaryKey == "" {
-						PrimaryKey = col.Name
-					}
-					uniqueColumns = append(uniqueColumns, col)
+					PrimaryKey = col.Name
+					uniqueColumnMap[col.Name] = col
 				}
 			}
 		}
+	}
+
+	// Convert map back to slice
+	uniqueColumns = []*Column{}
+	for _, col := range uniqueColumnMap {
+		uniqueColumns = append(uniqueColumns, col)
 	}
 
 	mod.Columns = columns

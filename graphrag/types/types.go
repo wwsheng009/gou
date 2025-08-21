@@ -167,20 +167,15 @@ type Embeddings []*EmbeddingResult
 
 // ChunkingOptions represents options for chunking
 type ChunkingOptions struct {
-	Type            ChunkingType     `json:"type,omitempty"`  // Content type, auto-detected if not provided
-	Size            int              `json:"size"`            // For text, PDF, Word, only, default is QA 300, Code 800,
-	Overlap         int              `json:"overlap"`         // For text, PDF, Word, only, default is QA 20, Code 100,
-	MaxDepth        int              `json:"max_depth"`       // For text, PDF, Word, only, default is 5
-	SizeMultiplier  int              `json:"size_multiplier"` // Base multiplier for chunk size calculation, default is 3
-	MaxConcurrent   int              `json:"max_concurrent"`
+	Type            ChunkingType     `json:"type,omitempty"`   // Content type, auto-detected if not provided
+	Size            int              `json:"size"`             // For text, PDF, Word, only, default is QA 300, Code 800,
+	Overlap         int              `json:"overlap"`          // For text, PDF, Word, only, default is QA 20, Code 100,
+	MaxDepth        int              `json:"max_depth"`        // For text, PDF, Word, only, default is 5
+	SizeMultiplier  int              `json:"size_multiplier"`  // Base multiplier for chunk size calculation, default is 3
+	MaxConcurrent   int              `json:"max_concurrent"`   // Maximum concurrent operations
+	Separator       string           `json:"separator"`        // Custom separator pattern (regex supported)
+	EnableDebug     bool             `json:"enable_debug"`     // Enable debug mode for detailed splitting information
 	SemanticOptions *SemanticOptions `json:"semantic_options"` // For Semantic recognition, etc.
-	VideoConnector  string           `json:"video_connector"`  // For Video recognition, etc.
-	AudioConnector  string           `json:"audio_connector"`  // For Audio recognition, etc.
-	ImageConnector  string           `json:"image_connector"`  // For Image recognition, etc.
-	FFmpegPath      string           `json:"ffmpeg_path"`      // ffmpeg path, for video, audio, etc.
-	FFprobePath     string           `json:"ffprobe_path"`     // ffprobe path, for video, audio, etc.
-	FFmpegOptions   string           `json:"ffmpeg_options"`   // ffmpeg options, for video, audio, etc.
-	FFprobeOptions  string           `json:"ffprobe_options"`  // ffprobe options, for video, audio, etc.
 }
 
 // SemanticOptions represents options for semantic recognition
@@ -1353,12 +1348,13 @@ type PaginatedDocumentsResult struct {
 // ScrollOptions represents options for scrolling through documents (iterator-style)
 type ScrollOptions struct {
 	CollectionName string                 `json:"collection_name"`
-	Filter         map[string]interface{} `json:"filter,omitempty"`     // Metadata filter
-	BatchSize      int                    `json:"batch_size,omitempty"` // Number of documents per batch (default: 100)
-	ScrollID       string                 `json:"scroll_id,omitempty"`  // Scroll ID for continuing pagination
-	IncludeVector  bool                   `json:"include_vector"`       // Whether to include vector data
-	IncludePayload bool                   `json:"include_payload"`      // Whether to include payload/metadata
-	Fields         []string               `json:"fields,omitempty"`     // Specific fields to retrieve
+	Filter         map[string]interface{} `json:"filter,omitempty"`    // Metadata filter
+	Limit          int                    `json:"limit,omitempty"`     // Number of documents per batch (default: 100)
+	ScrollID       string                 `json:"scroll_id,omitempty"` // Scroll ID for continuing pagination
+	OrderBy        []string               `json:"order_by,omitempty"`  // Fields to order by
+	IncludeVector  bool                   `json:"include_vector"`      // Whether to include vector data
+	IncludePayload bool                   `json:"include_payload"`     // Whether to include payload/metadata
+	Fields         []string               `json:"fields,omitempty"`    // Specific fields to retrieve
 }
 
 // ScrollResult represents scroll-based query results
@@ -1959,7 +1955,7 @@ type Options struct {
 	GraphStore GraphStore
 }
 
-// UpsertOptions represents the options for adding documents to the graph
+// UpsertOptions represents the options for GraphRag
 type UpsertOptions struct {
 	// Chunking is the chunking model to use for chunking documents
 	Chunking        Chunking
@@ -1988,8 +1984,8 @@ type UpsertOptions struct {
 	// Converter is the converter to use for converting documents to text (Optional)
 	Converter Converter
 
-	// GraphName is the graph name to use for storing the document (Optional)
-	GraphName string `json:"graph_name,omitempty"`
+	// CollectionID is the collection ID to use for storing the document (Optional)
+	CollectionID string `json:"collection_id,omitempty"`
 
 	// DocID is the document ID to use for tracking, if not provided, will auto-generate (Optional)
 	DocID string `json:"doc_id,omitempty"`
@@ -2158,10 +2154,11 @@ type PaginatedSegmentsResult struct {
 
 // ScrollSegmentsOptions represents options for scrolling through segments (iterator-style)
 type ScrollSegmentsOptions struct {
-	Filter    map[string]interface{} `json:"filter,omitempty"`     // Metadata filter (vote, score, weight, etc.)
-	BatchSize int                    `json:"batch_size,omitempty"` // Number of segments per batch (default: 100)
-	ScrollID  string                 `json:"scroll_id,omitempty"`  // Scroll ID for continuing pagination
-	Fields    []string               `json:"fields,omitempty"`     // Specific fields to retrieve
+	Filter   map[string]interface{} `json:"filter,omitempty"`    // Metadata filter (vote, score, weight, etc.)
+	Limit    int                    `json:"limit,omitempty"`     // Number of segments per batch (default: 100)
+	ScrollID string                 `json:"scroll_id,omitempty"` // Scroll ID for continuing pagination
+	OrderBy  []string               `json:"order_by,omitempty"`  // Fields to order by (score, weight, vote, created_at, etc.)
+	Fields   []string               `json:"fields,omitempty"`    // Specific fields to retrieve
 
 	// Include options
 	IncludeNodes         bool `json:"include_nodes"`         // Whether to include graph nodes

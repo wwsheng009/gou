@@ -457,10 +457,14 @@ func (mod *Model) DeleteWhere(param QueryParam) (int, error) {
 
 		data := maps.MapStrAny{}
 		columns := []string{}
-		for _, col := range mod.UniqueColumns {
+		baseTimestamp := time.Now().UnixNano()
+
+		for i, col := range mod.UniqueColumns {
 			typ := strings.ToLower(col.Type)
 			if typ == "string" {
-				data[col.Name] = dbal.Raw(fmt.Sprintf("CONCAT_WS('_', '%d')", time.Now().UnixNano()))
+				// For batch soft delete, use a unique timestamp per row via SQL expression
+				// The formula generates unique values for each row: original_value + current_timestamp + column_offset
+				data[col.Name] = dbal.Raw(fmt.Sprintf("CONCAT_WS('_', %s, '%d', '%d')", col.Name, baseTimestamp, i))
 				columns = append(
 					columns,
 					fmt.Sprintf("CONCAT('\"%s\":\"', `%s`, '\"')", col.Name, col.Name),
@@ -564,15 +568,16 @@ func (mod *Model) sqlite3DeleteWhere(param QueryParam) (int, error) {
 	// 删除数据
 	// field := fmt.Sprintf("%s.%s", mod.MetaData.Table.Name, "deleted_at")
 	data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
+	baseTimestamp := time.Now().UnixNano()
 	if mod.Driver == "sqlite3" {
 		data["deleted_at"] = dbal.Raw("datetime('now','localtime')")
 	}
-	// data[field] = dbal.Raw("CURRENT_TIMESTAMP")
-	// data["deleted_at"] = dbal.Raw("CURRENT_TIMESTAMP")
-	for _, col := range mod.UniqueColumns {
+	for i, col := range mod.UniqueColumns {
 		typ := strings.ToLower(col.Type)
 		if typ == "string" {
-			data[col.Name] = dbal.Raw(fmt.Sprintf("'_' ||  %s  || '%d'", col.Name, time.Now().UnixNano()))
+			// For batch soft delete, use a unique timestamp per row via SQL expression
+			// The formula generates unique values for each row: original_value + current_timestamp + column_offset
+			data[col.Name] = dbal.Raw(fmt.Sprintf("%s || '_' || '%d' || '_' || '%d'", col.Name, baseTimestamp, i))
 		}
 	}
 

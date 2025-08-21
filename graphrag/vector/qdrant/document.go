@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/yaoapp/gou/graphrag/types"
@@ -173,12 +174,16 @@ func convertMetadataToPayload(metadata map[string]interface{}) (map[string]*qdra
 
 // AddDocuments adds documents to the collection
 func (s *Store) AddDocuments(ctx context.Context, opts *types.AddDocumentOptions) ([]string, error) {
+
+	// Auto connect
+	err := s.tryConnect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Qdrant server: %w", err)
+	}
+
+	// Lock the mutex
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	if !s.connected {
-		return nil, fmt.Errorf("not connected to Qdrant server")
-	}
 
 	if opts == nil || len(opts.Documents) == 0 {
 		return nil, fmt.Errorf("no documents provided")
@@ -486,6 +491,12 @@ func (s *Store) shouldUseNamedVectors(doc *types.Document, opts *types.AddDocume
 
 // GetDocuments retrieves documents by IDs
 func (s *Store) GetDocuments(ctx context.Context, ids []string, opts *types.GetDocumentOptions) ([]*types.Document, error) {
+	// Auto connect
+	err := s.tryConnect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Qdrant server: %w", err)
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -664,8 +675,14 @@ func convertFilterToQdrant(filter map[string]interface{}) (*qdrant.Filter, error
 	}, nil
 }
 
-// ListDocuments lists documents with pagination
+// ListDocuments lists documents with pagination (Deprecated)
 func (s *Store) ListDocuments(ctx context.Context, opts *types.ListDocumentsOptions) (*types.PaginatedDocumentsResult, error) {
+	// Auto connect
+	err := s.tryConnect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Qdrant server: %w", err)
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -750,6 +767,12 @@ func (s *Store) ListDocuments(ctx context.Context, opts *types.ListDocumentsOpti
 
 // ScrollDocuments provides iterator-style access to documents
 func (s *Store) ScrollDocuments(ctx context.Context, opts *types.ScrollOptions) (*types.ScrollResult, error) {
+	// Auto connect
+	err := s.tryConnect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Qdrant server: %w", err)
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -761,15 +784,19 @@ func (s *Store) ScrollDocuments(ctx context.Context, opts *types.ScrollOptions) 
 		return nil, fmt.Errorf("scroll options cannot be nil")
 	}
 
-	batchSize := opts.BatchSize
-	if batchSize <= 0 {
-		batchSize = 100 // Default batch size
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 100 // Default limit
 	}
+
+	// Request limit+1 documents to determine if there are more results
+	// If limit+1 documents are returned, the last one serves as cursor but is not returned to user
+	queryLimit := limit + 1
 
 	// Prepare scroll request
 	req := &qdrant.ScrollPoints{
 		CollectionName: opts.CollectionName,
-		Limit:          qdrant.PtrOf(uint32(batchSize)),
+		Limit:          qdrant.PtrOf(uint32(queryLimit)), // Request limit+1 documents
 		WithPayload:    qdrant.NewWithPayload(opts.IncludePayload),
 		WithVectors:    qdrant.NewWithVectors(opts.IncludeVector),
 	}
@@ -783,55 +810,91 @@ func (s *Store) ScrollDocuments(ctx context.Context, opts *types.ScrollOptions) 
 		req.Filter = filter
 	}
 
+	// Add ordering if provided
+	if len(opts.OrderBy) > 0 {
+		// Use the first OrderBy field (Qdrant ScrollPoints supports single field ordering)
+		orderField := opts.OrderBy[0]
+
+		// Parse direction from field name (e.g., "score:desc" or just "score" for asc)
+		direction := qdrant.Direction_Asc // Default to ascending
+		fieldKey := orderField
+
+		if strings.Contains(orderField, ":") {
+			parts := strings.Split(orderField, ":")
+			if len(parts) == 2 {
+				fieldKey = parts[0]
+				if strings.ToLower(parts[1]) == "desc" {
+					direction = qdrant.Direction_Desc
+				}
+			}
+		}
+
+		// Set OrderBy for the request
+		req.OrderBy = &qdrant.OrderBy{
+			Key:       fmt.Sprintf("metadata.%s", fieldKey), // Access nested metadata field
+			Direction: &direction,
+		}
+	}
+
 	// Handle continuation with scroll ID
 	if opts.ScrollID != "" {
+
+		// Remove the order by from the request
+		req.OrderBy = nil
+
 		// Convert scroll ID back to offset (this is a simplified approach)
 		if offset, err := strconv.ParseUint(opts.ScrollID, 10, 64); err == nil {
 			req.Offset = qdrant.NewIDNum(offset)
 		}
 	}
 
-	// Collect all documents by scrolling through all batches
-	var allDocuments []*types.Document
-	var nextOffset *qdrant.PointId
+	// Perform single scroll request (not collecting all documents)
+	result, err := s.client.Scroll(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scroll documents: %w", err)
+	}
 
-	for {
-		// Set offset for continuation
-		if nextOffset != nil {
-			req.Offset = nextOffset
+	// Process results: if limit+1 documents are returned, use the last one as cursor but don't return to user
+	var documents []*types.Document
+	var hasMore bool
+	var nextScrollID string
+
+	if len(result) > limit {
+		// Received limit+1 documents, indicating there are more results
+		hasMore = true
+
+		// Convert only the first 'limit' documents for the user
+		for i := 0; i < limit; i++ {
+			doc := convertRetrievedPointToDocument(result[i], opts.IncludeVector, opts.IncludePayload)
+			documents = append(documents, doc)
 		}
 
-		// Perform scroll
-		result, err := s.client.Scroll(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scroll documents: %w", err)
+		// Use the last document (limit+1-th) as cursor
+		lastPoint := result[limit] // This is the (limit+1)-th document, used as cursor
+		if lastPoint.Id != nil {
+			if numID := lastPoint.Id.GetNum(); numID != 0 {
+				nextScrollID = fmt.Sprintf("%d", numID)
+			} else if uuidID := lastPoint.Id.GetUuid(); uuidID != "" {
+				nextScrollID = uuidID
+			}
 		}
+	} else {
+		// Received <= limit documents, indicating no more results
+		hasMore = false
+		nextScrollID = ""
 
-		// Convert results to documents
+		// Convert all returned documents
 		for _, point := range result {
 			doc := convertRetrievedPointToDocument(point, opts.IncludeVector, opts.IncludePayload)
-			allDocuments = append(allDocuments, doc)
-		}
-
-		// Check if we have more results
-		if len(result) < batchSize {
-			// No more results
-			break
-		}
-
-		// Set next offset to the last point ID for continuation
-		if len(result) > 0 {
-			lastPoint := result[len(result)-1]
-			nextOffset = lastPoint.Id
-		} else {
-			break
+			documents = append(documents, doc)
 		}
 	}
 
 	// Prepare scroll result
 	scrollResult := &types.ScrollResult{
-		Documents: allDocuments,
-		HasMore:   false, // We've collected all documents
+		Documents: documents,
+		ScrollID:  nextScrollID,
+		HasMore:   hasMore,
 	}
 
 	return scrollResult, nil
