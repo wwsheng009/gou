@@ -719,6 +719,14 @@ func (g *GraphRag) storeAllDocumentsToVectorStore(ctx context.Context, opts *Sto
 			metadata[k] = v
 		}
 
+		// User set metadata will overwrite this
+		if chunk.Metadata != nil {
+			// Add chunk metadata (User metadata will overwrite this)
+			for k, v := range chunk.Metadata {
+				metadata[k] = v
+			}
+		}
+
 		// Add convert metadata
 		for k, v := range opts.ConvertMetadata {
 			metadata[k] = v
@@ -743,10 +751,8 @@ func (g *GraphRag) storeAllDocumentsToVectorStore(ctx context.Context, opts *Sto
 		metadata["doc_id"] = opts.DocID
 		metadata["created_at"] = time.Now().Unix()
 
-		// Add default segment metadata (Vote, Score, Weight) to Vector DB metadata
-		metadata["vote"] = 0
-		metadata["score"] = 0.0
-		metadata["weight"] = 0.0
+		// Note: Default segment metadata (Vote, Score, Weight) are now stored as root-level fields in Vector DB
+		// They are not stored in metadata to avoid confusion with root-level fields
 
 		// If Store is not configured, also store Origin in Vector DB metadata
 		if g.Store == nil && opts.OriginalText != "" {

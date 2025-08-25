@@ -2,8 +2,8 @@ package graphrag
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/yaoapp/gou/graphrag/types"
 	"github.com/yaoapp/gou/graphrag/utils"
@@ -11,19 +11,16 @@ import (
 
 // Store key formats (without docID to reduce queries)
 const (
-	StoreKeyVote   = "segment_vote_%s"   // segment_vote_{segmentID}
-	StoreKeyScore  = "segment_score_%s"  // segment_score_{segmentID}
-	StoreKeyWeight = "segment_weight_%s" // segment_weight_{segmentID}
-	StoreKeyOrigin = "origin_%s"         // origin_{docID}
+	StoreKeyOrigin = "origin_%s" // origin_{docID}
 )
 
 // storeSegmentValue stores a value for a segment with the given key format
-func (g *GraphRag) storeSegmentValue(segmentID string, keyFormat string, value interface{}) error {
+func (g *GraphRag) storeSegmentValue(docID string, segmentID string, keyFormat string, value interface{}) error {
 	if g.Store == nil {
 		return fmt.Errorf("store is not configured")
 	}
 
-	key := fmt.Sprintf(keyFormat, segmentID)
+	key := fmt.Sprintf(keyFormat, docID, segmentID)
 	err := g.Store.Set(key, value, 0)
 	if err != nil {
 		return fmt.Errorf("failed to store %s for segment %s: %w", keyFormat, segmentID, err)
@@ -34,12 +31,12 @@ func (g *GraphRag) storeSegmentValue(segmentID string, keyFormat string, value i
 }
 
 // getSegmentValue retrieves a value for a segment with the given key format
-func (g *GraphRag) getSegmentValue(segmentID string, keyFormat string) (interface{}, bool) {
+func (g *GraphRag) getSegmentValue(docID string, segmentID string, keyFormat string) (interface{}, bool) {
 	if g.Store == nil {
 		return nil, false
 	}
 
-	key := fmt.Sprintf(keyFormat, segmentID)
+	key := fmt.Sprintf(keyFormat, docID, segmentID)
 	value, ok := g.Store.Get(key)
 	if !ok {
 		g.Logger.Debugf("Key %s not found for segment %s", keyFormat, segmentID)
@@ -50,12 +47,12 @@ func (g *GraphRag) getSegmentValue(segmentID string, keyFormat string) (interfac
 }
 
 // deleteSegmentValue deletes a value for a segment with the given key format
-func (g *GraphRag) deleteSegmentValue(segmentID string, keyFormat string) error {
+func (g *GraphRag) deleteSegmentValue(docID string, segmentID string, keyFormat string) error {
 	if g.Store == nil {
 		return nil // No error if store is not configured
 	}
 
-	key := fmt.Sprintf(keyFormat, segmentID)
+	key := fmt.Sprintf(keyFormat, docID, segmentID)
 	err := g.Store.Del(key)
 	if err != nil {
 		return fmt.Errorf("failed to delete %s for segment %s: %w", keyFormat, segmentID, err)
@@ -66,7 +63,7 @@ func (g *GraphRag) deleteSegmentValue(segmentID string, keyFormat string) error 
 }
 
 // updateSegmentMetadataInVectorBatch updates multiple segment metadata in vector database in batch
-func (g *GraphRag) updateSegmentMetadataInVectorBatch(ctx context.Context, updates []segmentMetadataUpdate) error {
+func (g *GraphRag) updateSegmentMetadataInVectorBatch(ctx context.Context, docID string, updates []segmentMetadataUpdate) error {
 	if g.Vector == nil {
 		return fmt.Errorf("vector database is not configured")
 	}
@@ -75,93 +72,55 @@ func (g *GraphRag) updateSegmentMetadataInVectorBatch(ctx context.Context, updat
 		return nil
 	}
 
-	// Group updates by collection
-	collectionUpdates := make(map[string][]segmentMetadataUpdate)
+	// Extract graphName from docID
+	graphName, _ := utils.ExtractCollectionIDFromDocID(docID)
+	if graphName == "" {
+		graphName = "default"
+	}
+
+	collectionIDs, err := utils.GetCollectionIDs(graphName)
+	if err != nil {
+		return fmt.Errorf("failed to get collection IDs for document %s: %w", docID, err)
+	}
+
+	collectionName := collectionIDs.Vector
+
+	// Check if collection exists
+	exists, err := g.Vector.CollectionExists(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("failed to check collection existence %s: %w", collectionName, err)
+	}
+	if !exists {
+		return fmt.Errorf("vector collection %s does not exist", collectionName)
+	}
+
+	// Prepare metadata updates for the new UpdateMetadata method
+	documentUpdates := make([]types.DocumentMetadataUpdate, 0)
+	segmentMetadataMap := make(map[string]map[string]interface{})
+
+	// Group updates by segment ID
 	for _, update := range updates {
-		_, graphName, err := g.getDocIDFromExistingSegments(ctx, []string{update.SegmentID})
-		if err != nil {
-			g.Logger.Warnf("Failed to get document info for segment %s: %v", update.SegmentID, err)
-			continue
+		if segmentMetadataMap[update.SegmentID] == nil {
+			segmentMetadataMap[update.SegmentID] = make(map[string]interface{})
 		}
-
-		collectionIDs, err := utils.GetCollectionIDs(graphName)
-		if err != nil {
-			g.Logger.Warnf("Failed to get collection IDs for segment %s: %v", update.SegmentID, err)
-			continue
-		}
-
-		collectionUpdates[collectionIDs.Vector] = append(collectionUpdates[collectionIDs.Vector], update)
+		segmentMetadataMap[update.SegmentID][update.MetadataKey] = update.Value
 	}
 
-	// Process each collection
-	for collectionName, colUpdates := range collectionUpdates {
-		// Check if collection exists
-		exists, err := g.Vector.CollectionExists(ctx, collectionName)
-		if err != nil {
-			g.Logger.Warnf("Failed to check collection existence %s: %v", collectionName, err)
-			continue
-		}
-		if !exists {
-			g.Logger.Warnf("Vector collection %s does not exist", collectionName)
-			continue
-		}
-
-		// Get segment IDs for this collection
-		segmentIDs := make([]string, 0, len(colUpdates))
-		for _, update := range colUpdates {
-			segmentIDs = append(segmentIDs, update.SegmentID)
-		}
-
-		// Get all segment documents
-		getOpts := &types.GetDocumentOptions{
-			CollectionName: collectionName,
-			IncludeVector:  false,
-			IncludePayload: true,
-		}
-
-		docs, err := g.Vector.GetDocuments(ctx, segmentIDs, getOpts)
-		if err != nil {
-			g.Logger.Warnf("Failed to get segment documents from collection %s: %v", collectionName, err)
-			continue
-		}
-
-		// Create a map of segment ID to document
-		docMap := make(map[string]*types.Document)
-		for _, doc := range docs {
-			if doc != nil {
-				docMap[doc.ID] = doc
-			}
-		}
-
-		// Update documents with new metadata
-		var docsToUpdate []*types.Document
-		for _, update := range colUpdates {
-			if doc, exists := docMap[update.SegmentID]; exists {
-				if doc.Metadata == nil {
-					doc.Metadata = make(map[string]interface{})
-				}
-				doc.Metadata[update.MetadataKey] = update.Value
-				docsToUpdate = append(docsToUpdate, doc)
-			}
-		}
-
-		// Batch update documents
-		if len(docsToUpdate) > 0 {
-			addOpts := &types.AddDocumentOptions{
-				CollectionName: collectionName,
-				Documents:      docsToUpdate,
-				Upsert:         true,
-				BatchSize:      50,
-			}
-
-			_, err = g.Vector.AddDocuments(ctx, addOpts)
-			if err != nil {
-				g.Logger.Warnf("Failed to update segment metadata in vector store collection %s: %v", collectionName, err)
-			} else {
-				g.Logger.Debugf("Updated %d segment metadata in vector store collection %s", len(docsToUpdate), collectionName)
-			}
-		}
+	// Convert to DocumentMetadataUpdate array
+	for segmentID, metadata := range segmentMetadataMap {
+		documentUpdates = append(documentUpdates, types.DocumentMetadataUpdate{
+			DocumentID: segmentID,
+			Metadata:   metadata,
+		})
 	}
+
+	// Use the new UpdateMetadata method for direct metadata updates
+	err = g.Vector.UpdateMetadata(ctx, collectionName, documentUpdates, nil)
+	if err != nil {
+		return fmt.Errorf("failed to update segment metadata in vector store: %w", err)
+	}
+
+	g.Logger.Debugf("Updated metadata for %d segments in vector store collection %s", len(documentUpdates), collectionName)
 
 	return nil
 }
@@ -173,275 +132,95 @@ type segmentMetadataUpdate struct {
 	Value       interface{}
 }
 
-// UpdateVote updates vote for segments
-func (g *GraphRag) UpdateVote(ctx context.Context, segments []types.SegmentVote) (int, error) {
-	if len(segments) == 0 {
-		return 0, nil
+// structToMap converts any struct to map[string]interface{} for Store operations
+func structToMap(data interface{}) (map[string]interface{}, error) {
+	// Use JSON marshaling/unmarshaling for reliable conversion
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal struct to JSON: %w", err)
 	}
 
-	// Strategy 1: Store not configured - use Vector DB metadata
-	if g.Store == nil {
-		// Update directly in Vector DB metadata
-		var updates []segmentMetadataUpdate
-		for _, segment := range segments {
-			updates = append(updates, segmentMetadataUpdate{
-				SegmentID:   segment.ID,
-				MetadataKey: "vote",
-				Value:       segment.Vote,
-			})
-		}
-
-		err := g.updateSegmentMetadataInVectorBatch(ctx, updates)
-		if err != nil {
-			return 0, fmt.Errorf("failed to update vote in vector store: %w", err)
-		}
-
-		return len(segments), nil
+	var result map[string]interface{}
+	err = json.Unmarshal(jsonData, &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON to map: %w", err)
 	}
 
-	// Strategy 2: Store configured - concurrent update to Store and Vector DB
-	var wg sync.WaitGroup
-	var storeErr, vectorErr error
-	updatedCount := 0
-
-	// Update Store concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		storeUpdated := 0
-		for _, segment := range segments {
-			err := g.storeSegmentValue(segment.ID, StoreKeyVote, segment.Vote)
-			if err != nil {
-				g.Logger.Warnf("Failed to update vote for segment %s in Store: %v", segment.ID, err)
-			} else {
-				storeUpdated++
-			}
-		}
-		if storeUpdated < len(segments) {
-			storeErr = fmt.Errorf("failed to update some votes in Store: %d/%d updated", storeUpdated, len(segments))
-		}
-	}()
-
-	// Update Vector DB concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var updates []segmentMetadataUpdate
-		for _, segment := range segments {
-			updates = append(updates, segmentMetadataUpdate{
-				SegmentID:   segment.ID,
-				MetadataKey: "vote",
-				Value:       segment.Vote,
-			})
-		}
-
-		err := g.updateSegmentMetadataInVectorBatch(ctx, updates)
-		if err != nil {
-			vectorErr = fmt.Errorf("failed to update vote in vector store: %w", err)
-		}
-	}()
-
-	wg.Wait()
-
-	// Count successful updates (at least one storage succeeded)
-	if storeErr == nil || vectorErr == nil {
-		updatedCount = len(segments)
-	}
-
-	// Log any errors but don't fail completely if one storage succeeded
-	if storeErr != nil {
-		g.Logger.Warnf("Store update error: %v", storeErr)
-	}
-	if vectorErr != nil {
-		g.Logger.Warnf("Vector DB update error: %v", vectorErr)
-	}
-
-	// Return error only if both failed
-	if storeErr != nil && vectorErr != nil {
-		return 0, fmt.Errorf("failed to update vote in both Store and Vector DB: Store error: %v, Vector error: %v", storeErr, vectorErr)
-	}
-
-	return updatedCount, nil
+	return result, nil
 }
 
-// UpdateScore updates score for segments
-func (g *GraphRag) UpdateScore(ctx context.Context, segments []types.SegmentScore) (int, error) {
-	if len(segments) == 0 {
-		return 0, nil
+// mapToStruct converts map[string]interface{} or any data back to specified struct type
+func mapToStruct(data interface{}, target interface{}) error {
+	// Use JSON marshaling/unmarshaling for reliable conversion
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data to JSON: %w", err)
 	}
 
-	// Strategy 1: Store not configured - use Vector DB metadata
-	if g.Store == nil {
-		// Update directly in Vector DB metadata
-		var updates []segmentMetadataUpdate
-		for _, segment := range segments {
-			updates = append(updates, segmentMetadataUpdate{
-				SegmentID:   segment.ID,
-				MetadataKey: "score",
-				Value:       segment.Score,
-			})
-		}
-
-		err := g.updateSegmentMetadataInVectorBatch(ctx, updates)
-		if err != nil {
-			return 0, fmt.Errorf("failed to update score in vector store: %w", err)
-		}
-
-		return len(segments), nil
+	err = json.Unmarshal(jsonData, target)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal JSON to struct: %w", err)
 	}
 
-	// Strategy 2: Store configured - concurrent update to Store and Vector DB
-	var wg sync.WaitGroup
-	var storeErr, vectorErr error
-	updatedCount := 0
-
-	// Update Store concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		storeUpdated := 0
-		for _, segment := range segments {
-			err := g.storeSegmentValue(segment.ID, StoreKeyScore, segment.Score)
-			if err != nil {
-				g.Logger.Warnf("Failed to update score for segment %s in Store: %v", segment.ID, err)
-			} else {
-				storeUpdated++
-			}
-		}
-		if storeUpdated < len(segments) {
-			storeErr = fmt.Errorf("failed to update some scores in Store: %d/%d updated", storeUpdated, len(segments))
-		}
-	}()
-
-	// Update Vector DB concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var updates []segmentMetadataUpdate
-		for _, segment := range segments {
-			updates = append(updates, segmentMetadataUpdate{
-				SegmentID:   segment.ID,
-				MetadataKey: "score",
-				Value:       segment.Score,
-			})
-		}
-
-		err := g.updateSegmentMetadataInVectorBatch(ctx, updates)
-		if err != nil {
-			vectorErr = fmt.Errorf("failed to update score in vector store: %w", err)
-		}
-	}()
-
-	wg.Wait()
-
-	// Count successful updates (at least one storage succeeded)
-	if storeErr == nil || vectorErr == nil {
-		updatedCount = len(segments)
-	}
-
-	// Log any errors but don't fail completely if one storage succeeded
-	if storeErr != nil {
-		g.Logger.Warnf("Store update error: %v", storeErr)
-	}
-	if vectorErr != nil {
-		g.Logger.Warnf("Vector DB update error: %v", vectorErr)
-	}
-
-	// Return error only if both failed
-	if storeErr != nil && vectorErr != nil {
-		return 0, fmt.Errorf("failed to update score in both Store and Vector DB: Store error: %v, Vector error: %v", storeErr, vectorErr)
-	}
-
-	return updatedCount, nil
+	return nil
 }
 
-// UpdateWeight updates weight for segments
-func (g *GraphRag) UpdateWeight(ctx context.Context, segments []types.SegmentWeight) (int, error) {
-	if len(segments) == 0 {
-		return 0, nil
+// segmentVoteToMap converts SegmentVote struct to map[string]interface{} for Store operations
+func segmentVoteToMap(vote types.SegmentVote) (map[string]interface{}, error) {
+	return structToMap(vote)
+}
+
+// mapToSegmentVote converts map[string]interface{} back to SegmentVote struct
+func mapToSegmentVote(data interface{}) (types.SegmentVote, error) {
+	var vote types.SegmentVote
+	err := mapToStruct(data, &vote)
+	if err != nil {
+		return types.SegmentVote{}, err
 	}
+	return vote, nil
+}
 
-	// Strategy 1: Store not configured - use Vector DB metadata
-	if g.Store == nil {
-		// Update directly in Vector DB metadata
-		var updates []segmentMetadataUpdate
-		for _, segment := range segments {
-			updates = append(updates, segmentMetadataUpdate{
-				SegmentID:   segment.ID,
-				MetadataKey: "weight",
-				Value:       segment.Weight,
-			})
-		}
+// segmentScoreToMap converts SegmentScore struct to map[string]interface{} for Store operations
+func segmentScoreToMap(score types.SegmentScore) (map[string]interface{}, error) {
+	return structToMap(score)
+}
 
-		err := g.updateSegmentMetadataInVectorBatch(ctx, updates)
-		if err != nil {
-			return 0, fmt.Errorf("failed to update weight in vector store: %w", err)
-		}
-
-		return len(segments), nil
+// mapToSegmentScore converts map[string]interface{} back to SegmentScore struct
+func mapToSegmentScore(data interface{}) (types.SegmentScore, error) {
+	var score types.SegmentScore
+	err := mapToStruct(data, &score)
+	if err != nil {
+		return types.SegmentScore{}, err
 	}
+	return score, nil
+}
 
-	// Strategy 2: Store configured - concurrent update to Store and Vector DB
-	var wg sync.WaitGroup
-	var storeErr, vectorErr error
-	updatedCount := 0
+// segmentWeightToMap converts SegmentWeight struct to map[string]interface{} for Store operations
+func segmentWeightToMap(weight types.SegmentWeight) (map[string]interface{}, error) {
+	return structToMap(weight)
+}
 
-	// Update Store concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		storeUpdated := 0
-		for _, segment := range segments {
-			err := g.storeSegmentValue(segment.ID, StoreKeyWeight, segment.Weight)
-			if err != nil {
-				g.Logger.Warnf("Failed to update weight for segment %s in Store: %v", segment.ID, err)
-			} else {
-				storeUpdated++
-			}
-		}
-		if storeUpdated < len(segments) {
-			storeErr = fmt.Errorf("failed to update some weights in Store: %d/%d updated", storeUpdated, len(segments))
-		}
-	}()
-
-	// Update Vector DB concurrently
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var updates []segmentMetadataUpdate
-		for _, segment := range segments {
-			updates = append(updates, segmentMetadataUpdate{
-				SegmentID:   segment.ID,
-				MetadataKey: "weight",
-				Value:       segment.Weight,
-			})
-		}
-
-		err := g.updateSegmentMetadataInVectorBatch(ctx, updates)
-		if err != nil {
-			vectorErr = fmt.Errorf("failed to update weight in vector store: %w", err)
-		}
-	}()
-
-	wg.Wait()
-
-	// Count successful updates (at least one storage succeeded)
-	if storeErr == nil || vectorErr == nil {
-		updatedCount = len(segments)
+// mapToSegmentWeight converts map[string]interface{} back to SegmentWeight struct
+func mapToSegmentWeight(data interface{}) (types.SegmentWeight, error) {
+	var weight types.SegmentWeight
+	err := mapToStruct(data, &weight)
+	if err != nil {
+		return types.SegmentWeight{}, err
 	}
+	return weight, nil
+}
 
-	// Log any errors but don't fail completely if one storage succeeded
-	if storeErr != nil {
-		g.Logger.Warnf("Store update error: %v", storeErr)
-	}
-	if vectorErr != nil {
-		g.Logger.Warnf("Vector DB update error: %v", vectorErr)
-	}
+// segmentHitToMap converts SegmentHit struct to map[string]interface{} for Store operations
+func segmentHitToMap(hit types.SegmentHit) (map[string]interface{}, error) {
+	return structToMap(hit)
+}
 
-	// Return error only if both failed
-	if storeErr != nil && vectorErr != nil {
-		return 0, fmt.Errorf("failed to update weight in both Store and Vector DB: Store error: %v, Vector error: %v", storeErr, vectorErr)
+// mapToSegmentHit converts map[string]interface{} back to SegmentHit struct
+func mapToSegmentHit(data interface{}) (types.SegmentHit, error) {
+	var hit types.SegmentHit
+	err := mapToStruct(data, &hit)
+	if err != nil {
+		return types.SegmentHit{}, err
 	}
-
-	return updatedCount, nil
+	return hit, nil
 }
