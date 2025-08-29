@@ -32,6 +32,7 @@ type VectorStore interface {
 	// Document Listing and Pagination
 	ListDocuments(ctx context.Context, opts *ListDocumentsOptions) (*PaginatedDocumentsResult, error) // deprecated
 	ScrollDocuments(ctx context.Context, opts *ScrollOptions) (*ScrollResult, error)
+	Count(ctx context.Context, collectionName string, filter map[string]interface{}) (int64, error) // Count documents with filter
 
 	// Vector Search Operations (core functionality)
 	SearchSimilar(ctx context.Context, opts *SearchOptions) (*SearchResult, error)
@@ -129,6 +130,9 @@ type GraphStore interface {
 	GetRelationships(ctx context.Context, opts *GetRelationshipsOptions) ([]*GraphRelationship, error)
 	DeleteRelationships(ctx context.Context, opts *DeleteRelationshipsOptions) error
 
+	// Save the extraction results and return the actual saved data
+	SaveExtractionResults(ctx context.Context, graphName string, results []*ExtractionResult) (*SaveExtractionResultsResponse, error)
+
 	// Query Operations (flexible query interface)
 	Query(ctx context.Context, opts *GraphQueryOptions) (*GraphResult, error)               // General-purpose graph query with Cypher, traversal, etc.
 	Communities(ctx context.Context, opts *CommunityDetectionOptions) ([]*Community, error) // Community detection and analysis
@@ -184,6 +188,7 @@ type GraphRag interface {
 	GetSegmentParents(ctx context.Context, docID string, segmentID string) (*SegmentTree, error)                         // Get parent tree of a given segment, return hierarchical tree structure
 	// ListSegments(ctx context.Context, docID string, options *ListSegmentsOptions) (*PaginatedSegmentsResult, error)      // List segments with pagination, return segments Deprecated
 	ScrollSegments(ctx context.Context, docID string, options *ScrollSegmentsOptions) (*SegmentScrollResult, error) // Scroll segments with iterator-style pagination, return segments
+	SegmentCount(ctx context.Context, docID string) (int, error)                                                    // Get segment count for a document
 
 	// Segment Voting, Scoring, Weighting, Hit
 	UpdateVotes(ctx context.Context, docID string, segments []SegmentVote, options ...UpdateVoteOptions) (int, error)       // Vote for segments, return updated count
@@ -198,6 +203,13 @@ type GraphRag interface {
 	RemoveHitsBySegmentID(ctx context.Context, docID string, segmentID string) (int, error)                                 // Remove all hits for a segment and clear statistics, return removed count
 	ScrollHits(ctx context.Context, docID string, options *ScrollHitsOptions) (*HitScrollResult, error)                     // Scroll hits with pagination support
 	GetHit(ctx context.Context, docID string, segmentID string, hitID string) (*SegmentHit, error)                          // Get a single hit by ID
+
+	// Segment Graph Management
+	GetSegmentGraph(ctx context.Context, docID string, segmentID string) (*SegmentGraph, error)                                            // Get the graph (entities and relationships) for a specific segment
+	GetSegmentEntities(ctx context.Context, docID string, segmentID string) ([]GraphNode, error)                                           // Get the entities for a specific segment
+	GetSegmentRelationships(ctx context.Context, docID string, segmentID string) ([]GraphRelationship, error)                              // Get the relationships for a specific segment (filtered by segmentID in source_chunks)
+	GetSegmentRelationshipsByEntities(ctx context.Context, docID string, segmentID string) ([]GraphRelationship, error)                    // Get all relationships connected to entities in this segment (regardless of relationship source_chunks)
+	ExtractSegmentGraph(ctx context.Context, docID string, segmentID string, options *ExtractionOptions) (*SegmentExtractionResult, error) // Re-extract entities and relationships for a specific segment
 
 	// Search Management
 	Search(ctx context.Context, options *QueryOptions, callback ...SearcherProgress) ([]Segment, error)                  // Search for segments

@@ -2215,6 +2215,56 @@ type SegmentTree struct {
 	Depth   int          `json:"depth"`            // Depth in the original document hierarchy (extracted from metadata)
 }
 
+// SegmentGraph represents the graph information for a specific segment
+type SegmentGraph struct {
+	DocID         string              `json:"doc_id"`
+	SegmentID     string              `json:"segment_id"`
+	Entities      []GraphNode         `json:"entities"`
+	Relationships []GraphRelationship `json:"relationships"`
+}
+
+// EntityDeduplicationResult contains the result of entity deduplication
+type EntityDeduplicationResult struct {
+	NormalizedID string   `json:"normalized_id"`
+	DocIDs       []string `json:"doc_ids"`
+	IsUpdate     bool     `json:"is_update"`
+}
+
+// RelationshipDeduplicationResult contains the result of relationship deduplication
+type RelationshipDeduplicationResult struct {
+	NormalizedID string   `json:"normalized_id"`
+	DocIDs       []string `json:"doc_ids"`
+	IsUpdate     bool     `json:"is_update"`
+}
+
+// SegmentExtractionResult represents the result of extracting entities and relationships from a segment
+// Minimal structure containing only statistical information for frontend consumption
+type SegmentExtractionResult struct {
+	DocID              string `json:"doc_id"`              // Document ID
+	SegmentID          string `json:"segment_id"`          // Segment ID
+	ExtractionModel    string `json:"extraction_model"`    // Model used for extraction
+	EntitiesCount      int    `json:"entities_count"`      // Number of entities extracted
+	RelationshipsCount int    `json:"relationships_count"` // Number of relationships extracted
+	// Removed fields (frontend doesn't need detailed data):
+	// - ExtractedEntities: detailed entity data not needed
+	// - ExtractedRelationships: detailed relationship data not needed
+	// - Text: can be retrieved via GetSegment if needed
+	// - ActualEntityIDs: internal implementation detail
+	// - ActualRelationshipIDs: internal implementation detail
+	// - EntityDeduplicationResults: internal implementation detail
+	// - RelationshipDeduplicationResults: internal implementation detail
+}
+
+// SaveExtractionResultsResponse represents the response from SaveExtractionResults
+// Contains the actual entities and relationships that were saved to the database
+type SaveExtractionResultsResponse struct {
+	SavedEntities      []GraphNode         `json:"saved_entities"`      // Actual entities saved (after deduplication)
+	SavedRelationships []GraphRelationship `json:"saved_relationships"` // Actual relationships saved (with updated node IDs)
+	EntitiesCount      int                 `json:"entities_count"`      // Number of entities saved
+	RelationshipsCount int                 `json:"relationships_count"` // Number of relationships saved
+	ProcessedCount     int                 `json:"processed_count"`     // Number of extraction results processed
+}
+
 // SegmentReaction represents a reaction for a segment
 type SegmentReaction struct {
 	Source    string                 `json:"source,omitempty"`    // Source of the reaction, e.g. "chat", "api", "bot", etc.
