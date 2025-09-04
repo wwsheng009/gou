@@ -29,7 +29,7 @@ func NewWithContext(ctx context.Context, name string, args ...interface{}) *Proc
 	if err != nil {
 		exception.New("%s", 500, err.Error()).Throw()
 	}
-	process = process.WithContext(ctx)
+	process.Context = ctx
 	return process
 }
 
@@ -213,6 +213,12 @@ func (process *Process) WithContext(ctx context.Context) *Process {
 // WithRuntime set the runtime interface
 func (process *Process) WithRuntime(runtime Runtime) *Process {
 	process.Runtime = runtime
+	return process
+}
+
+// WithCallback set the callback function
+func (process *Process) WithCallback(callback CallbackFunc) *Process {
+	process.Callback = callback
 	return process
 }
 
