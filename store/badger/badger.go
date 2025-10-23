@@ -31,10 +31,10 @@ type Badger struct {
 func New(path string) (*Badger, error) {
 	// Handle relative and absolute paths
 	var dbPath string
-	if strings.HasPrefix(path, "/") {
-		// Absolute path
+	if strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\\\") || (len(path) >= 2 && path[1] == ':') {
+		// Absolute path (Unix or Windows)
 		dbPath = path
-	} else if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
+	} else if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "..\\") || strings.HasPrefix(path, "../") {
 		// Relative path
 		dbPath = path
 	} else {
@@ -67,7 +67,7 @@ func New(path string) (*Badger, error) {
 	// Open badger database
 	opts := badger.DefaultOptions(absPath)
 	opts.Logger = nil // Disable badger logs to avoid noise
-
+	opts.ValueLogFileSize = 64 << 20
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open badger database: %v", err)
