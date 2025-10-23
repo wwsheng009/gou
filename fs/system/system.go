@@ -19,11 +19,22 @@ import (
 	"golang.org/x/image/draw"
 )
 
+// Mode the mode of the file system
+type Mode uint8
+
+const (
+	// ReadOnly the read only mode
+	ReadOnly Mode = 1
+	// ReadWrite the read write mode
+	ReadWrite Mode = 2
+)
+
 // File the file
 type File struct {
 	root      string   // the root path
 	allowlist []string // the pattern list https://pkg.go.dev/path/filepath#Match
 	denylist  []string // the pattern list https://pkg.go.dev/path/filepath#Match
+	mode      Mode     // the mode of the file system: read-only or read-write (default is read-write)
 }
 
 type fileInfoCache struct {
@@ -36,7 +47,7 @@ var cache fileInfoCache
 
 // New create a new file struct
 func New(root ...string) *File {
-	f := &File{allowlist: []string{}, denylist: []string{}}
+	f := &File{allowlist: []string{}, denylist: []string{}, mode: ReadWrite}
 	if len(root) > 0 {
 		f.root = root[0]
 	}
@@ -56,6 +67,12 @@ func (f *File) Allow(patterns ...string) *File {
 		}
 	}
 	f.allowlist = append(f.allowlist, patterns...)
+	return f
+}
+
+// ReadOnly set the read only flag
+func (f *File) ReadOnly() *File {
+	f.mode = ReadOnly
 	return f
 }
 
@@ -103,6 +120,10 @@ func (f *File) ReadCloser(file string) (io.ReadCloser, error) {
 
 // WriteCloser returns a WriteCloser with the file content
 func (f *File) WriteCloser(file string, perm uint32) (io.WriteCloser, error) {
+	if f.mode == ReadOnly {
+		return nil, fmt.Errorf("file system is read only")
+	}
+
 	file, err := f.absPath(file)
 	if err != nil {
 		return nil, err
@@ -121,6 +142,10 @@ func (f *File) WriteCloser(file string, perm uint32) (io.WriteCloser, error) {
 //
 //	If the file does not exist, WriteFile creates it with permissions perm (before umask); otherwise WriteFile truncates it before writing, without changing permissions.
 func (f *File) WriteFile(file string, data []byte, perm uint32) (int, error) {
+	if f.mode == ReadOnly {
+		return 0, fmt.Errorf("file system is read only")
+	}
+
 	file, err := f.absPath(file)
 	if err != nil {
 		return 0, err
@@ -142,6 +167,9 @@ func (f *File) WriteFile(file string, data []byte, perm uint32) (int, error) {
 
 // Write writes data to the named file, creating it if necessary.
 func (f *File) Write(file string, reader io.Reader, perm uint32) (int, error) {
+	if f.mode == ReadOnly {
+		return 0, fmt.Errorf("file system is read only")
+	}
 
 	file, err := f.absPath(file)
 	if err != nil {
@@ -176,6 +204,10 @@ func (f *File) Write(file string, reader io.Reader, perm uint32) (int, error) {
 // AppendFile Append writes data to the named file, creating it if necessary.
 // If the file does not exist, AppendFile creates it with permissions perm (before umask); otherwise AppendFile truncates it before writing, without changing permissions.
 func (f *File) AppendFile(file string, data []byte, perm uint32) (int, error) {
+	if f.mode == ReadOnly {
+		return 0, fmt.Errorf("file system is read only")
+	}
+
 	absfile, err := f.absPath(file)
 	if err != nil {
 		return 0, err
@@ -200,6 +232,9 @@ func (f *File) AppendFile(file string, data []byte, perm uint32) (int, error) {
 
 // Append Append writes data to the named file, creating it if necessary.
 func (f *File) Append(file string, reader io.Reader, perm uint32) (int, error) {
+	if f.mode == ReadOnly {
+		return 0, fmt.Errorf("file system is read only")
+	}
 
 	absfile, err := f.absPath(file)
 	if err != nil {
@@ -236,6 +271,10 @@ func (f *File) Append(file string, reader io.Reader, perm uint32) (int, error) {
 // @todo
 //   - It should be improved to support large files and avoid reading the entire file into memory.
 func (f *File) InsertFile(file string, offset int64, data []byte, perm uint32) (int, error) {
+	if f.mode == ReadOnly {
+		return 0, fmt.Errorf("file system is read only")
+	}
+
 	absfile, err := f.absPath(file)
 	if err != nil {
 		return 0, err
@@ -316,6 +355,10 @@ func (f *File) InsertFile(file string, offset int64, data []byte, perm uint32) (
 // @todo
 //   - it should be improved to support large files and avoid reading the entire file into memory.
 func (f *File) Insert(file string, offset int64, reader io.Reader, perm uint32) (int, error) {
+
+	if f.mode == ReadOnly {
+		return 0, fmt.Errorf("file system is read only")
+	}
 
 	absfile, err := f.absPath(file)
 	if err != nil {
@@ -446,6 +489,10 @@ func (f *File) Glob(pattern string) ([]string, error) {
 // Mkdir creates a new directory with the specified name and permission bits (before umask).
 // If there is an error, it will be of type *PathError.
 func (f *File) Mkdir(dir string, perm uint32) error {
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
+
 	dir, err := f.absPath(dir)
 	if err != nil {
 		return err
@@ -456,6 +503,10 @@ func (f *File) Mkdir(dir string, perm uint32) error {
 // MkdirAll creates a directory named path, along with any necessary parents, and returns nil, or else returns an error.
 // The permission bits perm (before umask) are used for all directories that MkdirAll creates. If path is already a directory, MkdirAll does nothing and returns nil.
 func (f *File) MkdirAll(dir string, perm uint32) error {
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
+
 	dir, err := f.absPath(dir)
 	if err != nil {
 		return err
@@ -496,6 +547,10 @@ func (f *File) MkdirTemp(dir string, pattern string) (string, error) {
 
 // Remove removes the named file or (empty) directory. If there is an error, it will be of type *PathError.
 func (f *File) Remove(name string) error {
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
+
 	name, err := f.absPath(name)
 	if err != nil {
 		return err
@@ -513,6 +568,10 @@ func (f *File) Remove(name string) error {
 
 // RemoveAll removes path and any children it contains. It removes everything it can but returns the first error it encounters. If the path does not exist, RemoveAll returns nil (no error). If there is an error, it will be of type *PathError.
 func (f *File) RemoveAll(name string) error {
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
+
 	name, err := f.absPath(name)
 	if err != nil {
 		return err
@@ -575,6 +634,10 @@ func (f *File) Mode(name string) (uint32, error) {
 // For compatibility with Go 1.12 and earlier, use a non-zero mode. Use mode 0400 for a read-only file and 0600 for a readable+writable file.
 // On Plan 9, the mode's permission bits, ModeAppend, ModeExclusive, and ModeTemporary are used.
 func (f *File) Chmod(name string, mode uint32) error {
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
+
 	name, err := f.absPath(name)
 	if err != nil {
 		return err
@@ -647,6 +710,10 @@ func (f *File) IsLink(name string) bool {
 // Move move from oldpath to newpath
 func (f *File) Move(oldpath string, newpath string) error {
 
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
+
 	oldpath, err := f.absPath(oldpath)
 	if err != nil {
 		return err
@@ -677,6 +744,10 @@ func (f *File) Move(oldpath string, newpath string) error {
 
 // Copy copy from src to dst
 func (f *File) Copy(src string, dest string) error {
+
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
 
 	src, err := f.absPath(src)
 	if err != nil {
@@ -846,6 +917,10 @@ func (f *File) List(path string, types []string, page, pageSize int, filter func
 
 // Resize resize the image
 func (f *File) Resize(inputPath, outputPath string, width, height uint) error {
+
+	if f.mode == ReadOnly {
+		return fmt.Errorf("file system is read only")
+	}
 
 	inputPath, err := f.absPath(inputPath)
 	if err != nil {
