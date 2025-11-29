@@ -63,19 +63,15 @@ func JsError(ctx *v8go.Context, err interface{}) *v8go.Value {
 	switch v := err.(type) {
 	case string:
 		message = v
-		break
 
 	case error:
 		message = exception.Trim(v)
-		break
 
 	case *exception.Exception:
 		message = exception.Trim(fmt.Errorf("%s", v.Message))
-		break
 
 	case exception.Exception:
 		message = exception.Trim(fmt.Errorf("%s", v.Message))
-		break
 
 	default:
 		message = fmt.Sprintf("%v", err)
@@ -120,6 +116,13 @@ func FreeJsValues(values []*v8go.Value) {
 		if !values[i].IsNull() && !values[i].IsUndefined() {
 			values[i].Release()
 		}
+	}
+}
+
+// FreeJsValue release js value
+func FreeJsValue(value *v8go.Value) {
+	if value != nil {
+		value.Release()
 	}
 }
 
@@ -170,7 +173,7 @@ func GoValues(jsValues []*v8go.Value, ctx *v8go.Context) ([]interface{}, error) 
 // * | ✅ | io.WriteCloser          | object(external)          |
 // * | ✅ | *gin.Context            | object(external)          |
 // * | ✅ | *gin.ResponseWriter     | object(external)          |
-// * | ✅ | bridge.Valuer           | custom value interface     |
+// * | ✅ | bridge.Valuer           | custom value interface    |
 // * |-----------------------------------------------------------
 func JsValue(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 
@@ -284,24 +287,31 @@ func jsValueParse(ctx *v8go.Context, value interface{}) (*v8go.Value, error) {
 //
 // *  JavaScript -> Golang
 // *  |-----------------------------------------------------------
-// *  |    | JavaScript            | Golang                      |
+// *  |    | JavaScript                        | Golang                      |
 // *  |-----------------------------------------------------------
-// *  | ✅ | null                      | nil                     |
-// *  | ✅ | undefined                 | bridge.Undefined        |
-// *  | ✅ | boolean                   | bool                    |
-// *  | ✅ | number(int)               | int                     |
-// *  | ✅ | number(float)             | float64                 |
-// *  | ✅ | Error                     | error                   |
-// *  | ✅ | bigint                    | int64                   |
-// *  | ✅ | string               	  | string                  |
-// *  | ✅ | object(SharedArrayBuffer) | []byte                  |
-// *  | ✅ | object(Uint8Array)        | []byte                  |
-// *  | ✅ | object                    | map[string]interface{}  |
-// *  | ✅ | array                     | []interface{}           |
-// *  | ✅ | object(Promise)           | bridge.PromiseT         |
-// *  | ✅ | function                  | bridge.FunctionT        |
-// *  | ✅ | object(external)          | interface{}             |
+// *  | ✅ | null                              | nil                         |
+// *  | ✅ | undefined                         | bridge.Undefined            |
+// *  | ✅ | boolean                           | bool                        |
+// *  | ✅ | number(int)                       | int                         |
+// *  | ✅ | number(float)                     | float64                     |
+// *  | ✅ | Error                             | error                       |
+// *  | ✅ | bigint                            | int64                       |
+// *  | ✅ | string                            | string                      |
+// *  | ✅ | object(SharedArrayBuffer)         | []byte                      |
+// *  | ✅ | object(Uint8Array)                | []byte                      |
+// *  | ✅ | object(with goValueID)            | Go object (via goMaps)      |
+// *  | ✅ | object(external)                  | interface{}                 |
+// *  | ✅ | object                            | map[string]interface{}      |
+// *  | ✅ | array                             | []interface{}               |
+// *  | ✅ | object(Promise)                   | bridge.PromiseT             |
+// *  | ✅ | function                          | bridge.FunctionT            |
 // *  |-----------------------------------------------------------
+// *
+// *  Special handling for Go-backed JavaScript objects:
+// *  - Objects created with SetInternalFieldCount(1) and goValueID in internal field (index 0)
+// *  - goValueID is stored in V8 internal field (not accessible from JavaScript)
+// *  - GoValue retrieves goValueID and looks up the original Go object in goMaps
+// *  - Examples: Trace, Context, and other Go objects exposed to JavaScript
 func GoValue(value *v8go.Value, ctx *v8go.Context) (interface{}, error) {
 
 	if value.IsNull() {
@@ -395,6 +405,23 @@ func GoValue(value *v8go.Value, ctx *v8go.Context) (interface{}, error) {
 			return nil, err
 		}
 		return goValue, nil
+	}
+
+	// Check for objects with goValueID in internal field (e.g., Trace objects)
+	// These objects store a unique ID that maps to a Go object in the global registry
+	// Internal fields are not accessible from JavaScript, providing better security
+	// This avoids the overhead of calling V8 functions
+	if value.IsObject() {
+		obj, err := value.AsObject()
+		if err == nil && obj.InternalFieldCount() > 0 {
+			// Try to get goValueID from internal field (index 0)
+			goValueID := obj.GetInternalField(0)
+			if goValueID != nil && goValueID.IsString() {
+				if goObj := GetGoObject(goValueID.String()); goObj != nil {
+					return goObj, nil
+				}
+			}
+		}
 	}
 
 	// Map, Array etc.
@@ -560,5 +587,5 @@ func (promise PromiseT) String() string {
 }
 
 func (undefined UndefinedT) String() string {
-	return fmt.Sprintf("undefined")
+	return "undefined"
 }

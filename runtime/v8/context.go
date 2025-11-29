@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/fatih/color"
-	"github.com/google/uuid"
 	"github.com/yaoapp/gou/runtime/v8/bridge"
 	"github.com/yaoapp/gou/runtime/v8/objects/console"
 	"github.com/yaoapp/kun/log"
@@ -59,6 +59,7 @@ func (context *Context) Call(method string, args ...interface{}) (interface{}, e
 		log.Error("%s.%s %s", context.ID, method, err.Error())
 		return nil, err
 	}
+	defer jsRes.Release() // Release the js value
 
 	goRes, err := bridge.GoValue(jsRes, context.Context)
 	if err != nil {
@@ -71,9 +72,9 @@ func (context *Context) Call(method string, args ...interface{}) (interface{}, e
 // CallAnonymous call the script function with anonymous function
 func (context *Context) CallAnonymous(source string, args ...interface{}) (interface{}, error) {
 
-	// Remove the function name from the source, if it exists regex
+	// Extract function name for debugging, then remove it from source
+	name := extractFunctionName(source)
 	source = reFuncHead.ReplaceAllString(source, "")
-	name := fmt.Sprintf("__anonymous_%s", uuid.New().String())
 
 	script, err := context.Isolate.CompileUnboundScript(source, name, v8go.CompileOptions{})
 	if err != nil {
@@ -97,11 +98,22 @@ func (context *Context) CallAnonymous(source string, args ...interface{}) (inter
 	return res, nil
 }
 
+// extractFunctionName extracts the function name from source code
+// If the source contains a named function (e.g., "function foo(arg)"), it returns the name
+// Otherwise, returns "<anonymous>"
+func extractFunctionName(source string) string {
+	matches := reFuncHead.FindStringSubmatch(source)
+	if len(matches) > 1 && matches[1] != "" {
+		return matches[1]
+	}
+	return "<anonymous>"
+}
+
 // CallAnonymousWith call the script function with anonymous function
 func (context *Context) CallAnonymousWith(ctx context.Context, source string, args ...interface{}) (interface{}, error) {
 
+	name := extractFunctionName(source)
 	source = reFuncHead.ReplaceAllString(source, "($2) => {")
-	name := fmt.Sprintf("__anonymous_%s", uuid.New().String())
 
 	script, err := context.Isolate.CompileUnboundScript(source, name, v8go.CompileOptions{})
 	if err != nil {
@@ -135,10 +147,9 @@ func (context *Context) CallAnonymousWith(ctx context.Context, source string, ar
 
 // CallWith call the script function
 func (context *Context) CallWith(ctx context.Context, method string, args ...interface{}) (interface{}, error) {
-
 	// Performance Mode
 	if context.Runner != nil {
-		return context.Runner.Exec(context.script), nil
+		return context.Runner.ExecWithContext(ctx, context.script), nil
 	}
 
 	// Set the global data
@@ -165,54 +176,54 @@ func (context *Context) CallWith(ctx context.Context, method string, args ...int
 	}
 	defer bridge.FreeJsValues(jsArgs)
 
-	doneChan := make(chan bool, 1)
-	resChan := make(chan interface{}, 1)
-	errChan := make(chan error, 1)
+	// Start a monitoring goroutine to handle context cancellation
+	// This goroutine only monitors and calls TerminateExecution, it doesn't execute V8 code
+	terminated := false
+	terminateLock := sync.Mutex{}
+	done := make(chan struct{})
 
 	go func() {
-
-		defer func() {
-			close(resChan)
-			close(errChan)
-		}()
-
 		select {
-		case <-doneChan:
-			return
-
-		default:
-
-			jsRes, err := global.MethodCall(method, bridge.Valuers(jsArgs)...)
-			if err != nil {
-				if e, ok := err.(*v8go.JSError); ok {
-					PrintException(method, args, e, context.SourceRoots)
-				}
-				errChan <- err
-				return
-			}
-
-			goRes, err := bridge.GoValue(jsRes, context.Context)
-			if err != nil {
-				errChan <- err
-				return
-			}
-
-			resChan <- goRes
+		case <-ctx.Done():
+			// Context cancelled, terminate V8 execution
+			terminateLock.Lock()
+			terminated = true
+			terminateLock.Unlock()
+			context.Isolate.TerminateExecution()
+		case <-done:
+			// Normal completion, do nothing
 		}
 	}()
+	defer close(done)
 
-	select {
-	case <-ctx.Done():
-		doneChan <- true
-		return nil, ctx.Err()
+	// Execute directly in current thread (no new goroutine for V8 execution)
+	// This ensures all V8 operations (create, use, dispose) happen on the same thread
+	jsRes, err := global.MethodCall(method, bridge.Valuers(jsArgs)...)
 
-	case err := <-errChan:
-		log.Error("%s.%s %s+v", context.ID, method, err)
-		return nil, err
+	// Check if execution was terminated due to context cancellation
+	terminateLock.Lock()
+	wasTerminated := terminated
+	terminateLock.Unlock()
 
-	case goRes := <-resChan:
-		return goRes, nil
+	if wasTerminated && err != nil {
+		return nil, ctx.Err() // Return context error, not V8 error
 	}
+
+	if err != nil {
+		if e, ok := err.(*v8go.JSError); ok {
+			PrintException(method, args, e, context.SourceRoots)
+		}
+		log.Error("%s.%s %v", context.ID, method, err)
+		return nil, err
+	}
+	defer jsRes.Release() // Release the js value
+
+	goRes, err := bridge.GoValue(jsRes, context.Context)
+	if err != nil {
+		return nil, err
+	}
+
+	return goRes, nil
 }
 
 // WithFunction add a function to the context
@@ -238,17 +249,26 @@ func (context *Context) WithGlobal(name string, value interface{}) error {
 
 // Close Context
 func (context *Context) Close() error {
-	if context.Context == nil {
-		return nil
-	}
 	// Standard Mode Release Isolate
 	if runtimeOption.Mode == "standard" {
-		context.Context.Close()
-		context.Context = nil
+		// In standard mode, we must properly manage the v8 Context and Isolate lifecycle
+		// The Context must be closed before disposing the Isolate to avoid "isolate entered" errors
 		context.UnboundScript = nil
 		context.Data = nil
-		context.Isolate.Dispose()
-		context.Isolate = nil
+
+		// Close context first (releases Persistent handle, exits any scopes)
+		if context.Context != nil {
+			context.Context.Close()
+			context.Context = nil
+		}
+
+		// Dispose isolate after context is closed
+		// This ensures no references remain to the isolate
+		if context.Isolate != nil {
+			context.Isolate.Dispose()
+			context.Isolate = nil
+		}
+
 		return nil
 	}
 

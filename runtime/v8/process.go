@@ -7,7 +7,7 @@ import (
 
 func init() {
 	process.Register("scripts", processScripts)
-	process.Register("studio", processStudio)
+	// process.Register("studio", processStudio) // Deprecated
 	// process.Register("runtime.v8.stats", processV8IsoStats)
 	// process.Register("runtime.v8.statTotal", processV8TotalStat)
 	process.Register("runtime.v8.option", processV8Option)
@@ -29,17 +29,16 @@ func processScripts(process *process.Process) interface{} {
 }
 
 // processScripts scripts.ID.Method
-func processStudio(process *process.Process) interface{} {
+// func processStudio(process *process.Process) interface{} {
 
-	script, err := SelectRoot(process.ID)
-	if err != nil {
-		exception.New("studio.%s not loaded", 404, process.ID).Throw()
-		return nil
-	}
-	return script.Exec(process)
+// 	script, err := SelectRoot(process.ID)
+// 	if err != nil {
+// 		exception.New("studio.%s not loaded", 404, process.ID).Throw()
+// 		return nil
+// 	}
+// 	return script.Exec(process)
 
-}
-
+// }
 func processV8Option(process *process.Process) interface{} {
 	return runtimeOption
 }
