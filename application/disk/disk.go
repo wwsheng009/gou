@@ -76,6 +76,7 @@ func (disk *Disk) Info(name string) (os.FileInfo, error) {
 
 // Walk traverse folders and read file contents
 func (disk *Disk) Walk(root string, handler func(root, file string, isdir bool) error, patterns ...string) error {
+	rootos := filepath.FromSlash(root)
 	rootAbs, err := disk.abs(root)
 	if err != nil {
 		return err
@@ -117,10 +118,10 @@ func (disk *Disk) Walk(root string, handler func(root, file string, isdir bool) 
 		}
 
 		if !isdir {
-			name = filepath.Join(root, name)
+			name = filepath.Join(rootos, name)
 		}
 
-		err = handler(root, name, isdir)
+		err = handler(rootos, name, isdir)
 		if filepath.SkipDir == err || filepath.SkipAll == err {
 			return err
 		}

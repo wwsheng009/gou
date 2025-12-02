@@ -326,7 +326,10 @@ func loadModule(file string, tsCode string) error {
 	if _, has := Modules[absFile]; has {
 		return nil
 	}
-
+	key := strings.TrimSuffix(absFile, filepath.Ext(absFile))
+	if _, has := Modules[key]; has {
+		return nil
+	}
 	globalName := GetModuleName(file)
 	// entryPoints := []entry{}
 	loaded := map[string]bool{}
@@ -481,6 +484,7 @@ func replaceImportCode(file string, source []byte) (string, []Import, error) {
 			} else if strings.Index(importClause, " as ") >= 0 {
 				name = strings.ReplaceAll(importClause, " as ", ":")
 			}
+
 			imports = append(imports, Import{
 				Name:    name,
 				Path:    relImportPath,
