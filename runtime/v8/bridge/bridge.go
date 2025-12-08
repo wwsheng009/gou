@@ -29,10 +29,11 @@ type PromiseT struct {
 
 // Share share data
 type Share struct {
-	Iso    string // Isolate ID
-	Sid    string
-	Root   bool
-	Global map[string]interface{}
+	Iso        string                 // Isolate ID
+	Sid        string                 // Session ID
+	Root       bool                   // Root context flag
+	Global     map[string]interface{} // Global variables
+	Authorized map[string]interface{} // Authorized information (optional)
 }
 
 // Valuer is the interface for the value
@@ -467,6 +468,11 @@ func SetShareData(ctx *v8go.Context, obj *v8go.Object, share *Share) error {
 		"ISO":  share.Iso,
 	}
 
+	// Add Authorized if present
+	if share.Authorized != nil {
+		goData["AUTHORIZED"] = share.Authorized
+	}
+
 	jsData, err := JsValue(ctx, goData)
 	if err != nil {
 		return err
@@ -523,11 +529,17 @@ func ShareData(ctx *v8go.Context) (*Share, error) {
 		iso = ""
 	}
 
+	authorized, ok := data["AUTHORIZED"].(map[string]interface{})
+	if !ok {
+		authorized = nil
+	}
+
 	return &Share{
-		Root:   root,
-		Sid:    sid,
-		Global: global,
-		Iso:    iso,
+		Root:       root,
+		Sid:        sid,
+		Global:     global,
+		Iso:        iso,
+		Authorized: authorized,
 	}, nil
 }
 

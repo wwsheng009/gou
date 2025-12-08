@@ -30,9 +30,10 @@ func (context *Context) Call(method string, args ...interface{}) (interface{}, e
 	// Set the global data
 	global := context.Global()
 	err := bridge.SetShareData(context.Context, global, &bridge.Share{
-		Sid:    context.Sid,
-		Root:   context.Root,
-		Global: context.Data,
+		Sid:        context.Sid,
+		Root:       context.Root,
+		Global:     context.Data,
+		Authorized: context.Authorized,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s.%s %+v", context.ID, method, err)
@@ -155,9 +156,10 @@ func (context *Context) CallWith(ctx context.Context, method string, args ...int
 	// Set the global data
 	global := context.Global()
 	err := bridge.SetShareData(context.Context, global, &bridge.Share{
-		Sid:    context.Sid,
-		Root:   context.Root,
-		Global: context.Data,
+		Sid:        context.Sid,
+		Root:       context.Root,
+		Global:     context.Data,
+		Authorized: context.Authorized,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s.%s %+v", context.ID, method, err)
@@ -247,6 +249,12 @@ func (context *Context) WithGlobal(name string, value interface{}) error {
 	return nil
 }
 
+// WithAuthorized set the authorized information for the context
+func (context *Context) WithAuthorized(authorized map[string]interface{}) *Context {
+	context.Authorized = authorized
+	return context
+}
+
 // Close Context
 func (context *Context) Close() error {
 	// Standard Mode Release Isolate
@@ -255,6 +263,7 @@ func (context *Context) Close() error {
 		// The Context must be closed before disposing the Isolate to avoid "isolate entered" errors
 		context.UnboundScript = nil
 		context.Data = nil
+		context.Authorized = nil
 
 		// Close context first (releases Persistent handle, exits any scopes)
 		if context.Context != nil {
@@ -277,6 +286,7 @@ func (context *Context) Close() error {
 		context.Runner.Reset()
 		context.Context = nil
 		context.Data = nil
+		context.Authorized = nil
 		context.Runner = nil
 		return nil
 	}
