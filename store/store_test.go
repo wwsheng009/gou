@@ -12,8 +12,47 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/connector"
+	"github.com/yaoapp/gou/store/xun"
 	"github.com/yaoapp/kun/any"
+	"github.com/yaoapp/xun/capsule"
 )
+
+func TestMain(m *testing.M) {
+	// Initialize database connection for xun store tests
+	TestDriver := os.Getenv("GOU_TEST_DB_DRIVER")
+	TestDSN := os.Getenv("GOU_TEST_DSN")
+	if TestDSN != "" {
+		switch TestDriver {
+		case "sqlite3":
+			capsule.AddConn("primary", "sqlite3", TestDSN).SetAsGlobal()
+		default:
+			capsule.AddConn("primary", "mysql", TestDSN).SetAsGlobal()
+		}
+	}
+
+	// Initialize application and connectors
+	root := os.Getenv("GOU_TEST_APPLICATION")
+	if root != "" {
+		app, err := application.OpenFromDisk(root)
+		if err == nil {
+			application.Load(app)
+
+			// Load connectors
+			connectors := map[string]string{
+				"mysql":  filepath.Join("connectors", "mysql.conn.yao"),
+				"mongo":  filepath.Join("connectors", "mongo.conn.yao"),
+				"redis":  filepath.Join("connectors", "redis.conn.yao"),
+				"sqlite": filepath.Join("connectors", "sqlite.conn.yao"),
+			}
+
+			for id, file := range connectors {
+				connector.Load(file, id)
+			}
+		}
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestLoad(t *testing.T) {
 
@@ -24,6 +63,8 @@ func TestLRU(t *testing.T) {
 	testBasic(t, lru)
 	testMulti(t, lru)
 	testList(t, lru)
+	testDelPattern(t, lru)
+	testIncrDecr(t, lru)
 }
 
 func TestRedis(t *testing.T) {
@@ -31,6 +72,8 @@ func TestRedis(t *testing.T) {
 	testBasic(t, redis)
 	testMulti(t, redis)
 	testList(t, redis)
+	testDelPattern(t, redis)
+	testIncrDecr(t, redis)
 }
 
 func TestMongo(t *testing.T) {
@@ -38,13 +81,37 @@ func TestMongo(t *testing.T) {
 	testBasic(t, mongo)
 	testMulti(t, mongo)
 	testList(t, mongo)
+	testDelPattern(t, mongo)
+	testIncrDecr(t, mongo)
 }
 
-func TestBadger(t *testing.T) {
-	badger := newBadgerStore(t)
-	testBasic(t, badger)
-	testMulti(t, badger)
-	testList(t, badger)
+func TestXun(t *testing.T) {
+	xunStore := newXunStore(t)
+	testBasic(t, xunStore)
+	testMulti(t, xunStore)
+	testList(t, xunStore)
+	testDelPattern(t, xunStore)
+	testIncrDecr(t, xunStore)
+}
+
+func TestLRUTTL(t *testing.T) {
+	lru := newStore(t, nil)
+	testTTL(t, lru)
+}
+
+func TestXunTTL(t *testing.T) {
+	xunStore := newXunStore(t)
+	testTTL(t, xunStore)
+}
+
+func TestRedisTTL(t *testing.T) {
+	redis := newStore(t, getConnector(t, "redis"))
+	testTTL(t, redis)
+}
+
+func TestMongoTTL(t *testing.T) {
+	mongo := newStore(t, getConnector(t, "mongo"))
+	testTTL(t, mongo)
 }
 
 func TestLRUConcurrency(t *testing.T) {
@@ -68,11 +135,11 @@ func TestMongoConcurrency(t *testing.T) {
 	testGoroutineLeak(t, mongo)
 }
 
-func TestBadgerConcurrency(t *testing.T) {
-	badger := newBadgerStore(t)
-	testConcurrency(t, badger)
-	testMemoryLeak(t, badger)
-	testGoroutineLeak(t, badger)
+func TestXunConcurrency(t *testing.T) {
+	xunStore := newXunStore(t)
+	testConcurrency(t, xunStore)
+	testMemoryLeak(t, xunStore)
+	testGoroutineLeak(t, xunStore)
 }
 
 func testBasic(t *testing.T, kv Store) {
@@ -193,22 +260,107 @@ func newStore(t *testing.T, c connector.Connector) Store {
 	return store
 }
 
-func newBadgerStore(t *testing.T) Store {
-	// Create a temporary directory for testing
-	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("badger_test_%d", time.Now().UnixNano()))
+func newXunStore(t *testing.T) Store {
+	// Initialize database connection
+	dbconnect(t)
 
-	// Create badger store with path option - like LRU with size
-	store, err := New(nil, Option{"path": tempDir})
+	// Create xun store with option
+	tableName := fmt.Sprintf("__store_test_%d", time.Now().UnixNano())
+	store, err := xun.New(xun.Option{
+		Table:           tableName,
+		Connector:       "default",
+		CacheSize:       1024,
+		CleanupInterval: time.Second * 5,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Schedule cleanup
 	t.Cleanup(func() {
-		os.RemoveAll(tempDir)
+		store.Clear()
+		store.Close()
+		// Drop the test table
+		capsule.Query().Table(tableName).Delete()
 	})
 
 	return store
+}
+
+func dbconnect(t *testing.T) {
+	if capsule.Global != nil {
+		return // Already connected
+	}
+
+	TestDriver := os.Getenv("GOU_TEST_DB_DRIVER")
+	TestDSN := os.Getenv("GOU_TEST_DSN")
+
+	if TestDSN == "" {
+		t.Skip("GOU_TEST_DSN not set, skipping xun store tests")
+		return
+	}
+
+	// Connect to database
+	switch TestDriver {
+	case "sqlite3":
+		capsule.AddConn("primary", "sqlite3", TestDSN).SetAsGlobal()
+	default:
+		capsule.AddConn("primary", "mysql", TestDSN).SetAsGlobal()
+	}
+}
+
+func testTTL(t *testing.T, kv Store) {
+	kv.Clear()
+
+	// Use unique key to avoid conflicts
+	ttlKey := fmt.Sprintf("ttl_key_%d", time.Now().UnixNano())
+
+	// Test TTL expiration
+	err := kv.Set(ttlKey, "ttl_value", time.Second*2)
+	assert.Nil(t, err)
+
+	// Value should exist immediately
+	value, ok := kv.Get(ttlKey)
+	assert.True(t, ok, "Get immediately should return true")
+	assert.Equal(t, "ttl_value", value)
+
+	// Has should return true
+	assert.True(t, kv.Has(ttlKey), "Has immediately should return true")
+
+	// Len should include the key
+	assert.Equal(t, 1, kv.Len(), "Len immediately should be 1")
+
+	// Keys should include the key
+	assert.Contains(t, kv.Keys(), ttlKey, "Keys immediately should contain the key")
+
+	// Wait for TTL to expire
+	time.Sleep(time.Second * 3)
+
+	// Value should be gone after TTL
+	_, ok = kv.Get(ttlKey)
+	assert.False(t, ok, "Get after TTL should return false")
+
+	// Has should return false
+	assert.False(t, kv.Has(ttlKey), "Has after TTL should return false")
+
+	// Len should be 0
+	assert.Equal(t, 0, kv.Len(), "Len after TTL should be 0")
+
+	// Keys should be empty
+	assert.Empty(t, kv.Keys(), "Keys after TTL should be empty")
+
+	// Test that non-TTL values persist
+	noTTLKey := fmt.Sprintf("no_ttl_key_%d", time.Now().UnixNano())
+	err = kv.Set(noTTLKey, "no_ttl_value", 0)
+	assert.Nil(t, err)
+
+	time.Sleep(time.Second * 1)
+
+	value, ok = kv.Get(noTTLKey)
+	assert.True(t, ok)
+	assert.Equal(t, "no_ttl_value", value)
+
+	kv.Clear()
 }
 
 func getConnector(t *testing.T, name string) connector.Connector {
@@ -218,15 +370,10 @@ func getConnector(t *testing.T, name string) connector.Connector {
 func prepareStores(t *testing.T) {
 
 	stores := map[string]string{
-		"cache":  filepath.Join("stores", "cache.lru.yao"),
-		"share":  filepath.Join("stores", "share.redis.yao"),
-		"data":   filepath.Join("stores", "data.mongo.yao"),
-		"badger": filepath.Join("stores", "local.badger.yao"),
+		"cache": filepath.Join("stores", "cache.lru.yao"),
+		"share": filepath.Join("stores", "share.redis.yao"),
+		"data":  filepath.Join("stores", "data.mongo.yao"),
 	}
-
-	// Remove the data store (For cleaning the stores whitch created by the test)
-	var path = filepath.Join(os.Getenv("GOU_TEST_APPLICATION"), "badger", "db")
-	os.RemoveAll(path)
 
 	for id, file := range stores {
 		_, err := Load(file, id)
@@ -257,6 +404,115 @@ func prepare(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func testIncrDecr(t *testing.T, kv Store) {
+	// Clear any existing data
+	kv.Clear()
+
+	// Test Incr on non-existent key (should start from 0)
+	result, err := kv.Incr("counter", 1)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(1), result)
+
+	// Test Incr on existing key
+	result, err = kv.Incr("counter", 5)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(6), result)
+
+	// Verify the value via Get
+	value, ok := kv.Get("counter")
+	assert.True(t, ok)
+	assert.Equal(t, int64(6), int64(any.Of(value).CInt()))
+
+	// Test Decr
+	result, err = kv.Decr("counter", 2)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(4), result)
+
+	// Test Decr with larger delta
+	result, err = kv.Decr("counter", 10)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(-6), result)
+
+	// Test Incr with negative delta (same as Decr)
+	result, err = kv.Incr("counter", -4)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(-10), result)
+
+	// Test Decr on non-existent key
+	result, err = kv.Decr("new_counter", 5)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(-5), result)
+
+	kv.Clear()
+}
+
+func testDelPattern(t *testing.T, kv Store) {
+	// Clear any existing data
+	kv.Clear()
+
+	// Set up test data with different prefixes
+	kv.Set("user:123:name", "John", 0)
+	kv.Set("user:123:email", "john@example.com", 0)
+	kv.Set("user:123:age", 30, 0)
+	kv.Set("user:456:name", "Jane", 0)
+	kv.Set("user:456:email", "jane@example.com", 0)
+	kv.Set("chat:789:message1", "Hello", 0)
+	kv.Set("chat:789:message2", "World", 0)
+	kv.Set("other:key", "value", 0)
+
+	// Verify all keys exist
+	assert.Equal(t, 8, kv.Len())
+
+	// Test deleting with pattern - delete all user:123:* keys
+	err := kv.Del("user:123:*")
+	assert.Nil(t, err)
+
+	// Verify user:123:* keys are deleted
+	assert.False(t, kv.Has("user:123:name"))
+	assert.False(t, kv.Has("user:123:email"))
+	assert.False(t, kv.Has("user:123:age"))
+
+	// Verify other keys still exist
+	assert.True(t, kv.Has("user:456:name"))
+	assert.True(t, kv.Has("user:456:email"))
+	assert.True(t, kv.Has("chat:789:message1"))
+	assert.True(t, kv.Has("chat:789:message2"))
+	assert.True(t, kv.Has("other:key"))
+
+	assert.Equal(t, 5, kv.Len())
+
+	// Test deleting with pattern - delete all chat:* keys
+	err = kv.Del("chat:*")
+	assert.Nil(t, err)
+
+	assert.False(t, kv.Has("chat:789:message1"))
+	assert.False(t, kv.Has("chat:789:message2"))
+	assert.Equal(t, 3, kv.Len())
+
+	// Test deleting with pattern - delete all user:* keys
+	err = kv.Del("user:*")
+	assert.Nil(t, err)
+
+	assert.False(t, kv.Has("user:456:name"))
+	assert.False(t, kv.Has("user:456:email"))
+	assert.Equal(t, 1, kv.Len())
+
+	// Verify other:key still exists
+	assert.True(t, kv.Has("other:key"))
+
+	// Test exact delete still works
+	err = kv.Del("other:key")
+	assert.Nil(t, err)
+	assert.False(t, kv.Has("other:key"))
+	assert.Equal(t, 0, kv.Len())
+
+	// Test deleting non-existent pattern (should not error)
+	err = kv.Del("nonexistent:*")
+	assert.Nil(t, err)
+
+	kv.Clear()
 }
 
 func testList(t *testing.T, kv Store) {
