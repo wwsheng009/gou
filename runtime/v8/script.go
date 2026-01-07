@@ -235,8 +235,8 @@ func TransformTS(file string, source []byte) ([]byte, error) {
 		importCodes := []string{}
 		if imports, has := ImportMap[file]; has {
 			for _, imp := range imports {
-				key := strings.TrimSuffix(imp.AbsPath, filepath.Ext(imp.AbsPath))
-				module, has := Modules[key]
+				// key := strings.TrimSuffix(imp.AbsPath, filepath.Ext(imp.AbsPath))
+				module, has := Modules[imp.AbsPath]
 				if has {
 					importCodes = append(importCodes, fmt.Sprintf("%s;const %s = %s;", module.Source, imp.Name, module.GlobalName))
 				}
@@ -326,10 +326,10 @@ func loadModule(file string, tsCode string) error {
 	if _, has := Modules[absFile]; has {
 		return nil
 	}
-	key := strings.TrimSuffix(absFile, filepath.Ext(absFile))
-	if _, has := Modules[key]; has {
-		return nil
-	}
+	// key := strings.TrimSuffix(absFile, filepath.Ext(absFile))
+	// if _, has := Modules[key]; has {
+	// 	return nil
+	// }
 	globalName := GetModuleName(file)
 	// entryPoints := []entry{}
 	loaded := map[string]bool{}
@@ -405,7 +405,8 @@ func loadModule(file string, tsCode string) error {
 				ModuleSourceMaps[key] = out.Contents
 
 			} else if strings.HasSuffix(out.Path, ".js") {
-				key := strings.TrimPrefix(strings.TrimSuffix(out.Path, filepath.Ext(out.Path)), outdir)
+				// key := strings.TrimPrefix(strings.TrimSuffix(out.Path, filepath.Ext(out.Path)), outdir)
+				key := strings.TrimPrefix(strings.ReplaceAll(out.Path, ".js", ".ts"), outdir)
 				key = filepath.Join(dir, key)
 				Modules[key] = Module{
 					File:       file,
@@ -815,11 +816,18 @@ func (script *Script) execStandardWithSharedContext(ctx *v8go.Context, process *
 	// Create instance of the script
 	instance, err := ctx.Isolate().CompileUnboundScript(script.Source, script.File, v8go.CompileOptions{})
 	if err != nil {
+		if e, ok := err.(*v8go.JSError); ok {
+			PrintException(process.Method, process.Args, e, script.SourceRoots)
+		}
 		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
 		return nil
 	}
 	v, err := instance.Run(ctx)
 	if err != nil {
+		if e, ok := err.(*v8go.JSError); ok {
+			PrintException(process.Method, process.Args, e, script.SourceRoots)
+		}
+		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
 		return err
 	}
 	defer v.Release()
