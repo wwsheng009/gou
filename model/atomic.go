@@ -312,7 +312,7 @@ func (mod *Model) Save(row maps.MapStrAny) (interface{}, error) {
 		uuid := ensureUUID(row, mod.PrimaryKey)
 		err := capsule.Query().
 			Table(mod.MetaData.Table.Name).
-			Insert(row.Keys(), [][]interface{}{row.Values()})
+			Insert([][]interface{}{row.Values()},row.Keys())
 		if err != nil {
 			return "", err
 		}
