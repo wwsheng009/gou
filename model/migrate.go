@@ -102,14 +102,14 @@ func (mod *Model) HasTable() (bool, error) {
 }
 
 // InsertValues insert the default values of the model
-func (mod *Model) InsertValues() ([]int, []error) {
+func (mod *Model) InsertValues() ([]interface{}, []error) {
 
-	ids := []int{}
+	ids := []interface{}{}
 	errs := []error{}
 
 	// Add the default values
 	for _, row := range mod.MetaData.Values {
-		id, err := mod.Create(row)
+		id, err := mod.CreateX(row)
 		if err != nil {
 			errs = append(errs, err)
 		}

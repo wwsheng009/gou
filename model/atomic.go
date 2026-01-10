@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/kun/maps"
@@ -89,6 +90,26 @@ func (mod *Model) MustCount(param QueryParam) int {
 	}
 	return count
 }
+func ensureUUID(row maps.MapStrAny, pk string) string {
+	val := row.Get(pk)
+	if s, ok := val.(string); ok && s != "" {
+		return s
+	}
+	uuidStr := uuid.New().String()
+	row.Set(pk, uuidStr)
+	return uuidStr
+}
+func (mod *Model) CreateX(row maps.MapStrAny) (interface{}, error) {
+	if !mod.HasUUIDPrimaryKey() {
+		return mod.Create(row)
+	}
+	uuid := ensureUUID(row, mod.PrimaryKey)
+	err := mod.Insert(row.Keys(), [][]interface{}{row.Values()})
+	if err != nil {
+		return "", err
+	}
+	return uuid, nil
+}
 
 // Create 创建单条数据, 返回新创建数据ID
 func (mod *Model) Create(row maps.MapStrAny) (int, error) {
@@ -122,10 +143,21 @@ func (mod *Model) Create(row maps.MapStrAny) (int, error) {
 
 	return int(id), err
 }
+func (mode *Model) HasUUIDPrimaryKey() bool {
+	//PrimaryKey determined when mod metadata is loaded
+	if mode.PrimaryKey == "" {
+		return false
+	}
+	column, has := mode.Columns[mode.PrimaryKey]
+	if !has {
+		return false
+	}
+	return column.Primary && strings.ToLower(column.Type) == "uuid"
+}
 
 // MustCreate 创建单条数据, 返回新创建数据ID, 失败抛出异常
-func (mod *Model) MustCreate(row maps.MapStrAny) int {
-	id, err := mod.Create(row)
+func (mod *Model) MustCreate(row maps.MapStrAny) interface{} {
+	id, err := mod.CreateX(row)
 	if err != nil {
 		exception.Err(err, 500).Throw()
 	}
@@ -275,6 +307,16 @@ func (mod *Model) Save(row maps.MapStrAny) (interface{}, error) {
 		}
 		row.Del("deleted_at") // 忽略删除字段
 		row.Del("updated_at") // 忽略更新字段
+	}
+	if mod.HasUUIDPrimaryKey() {
+		uuid := ensureUUID(row, mod.PrimaryKey)
+		err := capsule.Query().
+			Table(mod.MetaData.Table.Name).
+			Insert(row.Keys(), [][]interface{}{row.Values()})
+		if err != nil {
+			return "", err
+		}
+		return uuid, nil
 	}
 
 	id, err := capsule.Query().
@@ -657,7 +699,7 @@ func (mod *Model) EachSave(rows []map[string]interface{}, eachrow ...maps.MapStr
 		if id, has := row[mod.PrimaryKey]; has {
 			_, err := mod.Find(id, QueryParam{Select: []interface{}{mod.PrimaryKey}})
 			if err != nil { // id does not exists & create
-				_, err := mod.Create(row)
+				_, err := mod.CreateX(row)
 				if err != nil {
 					messages = append(messages, fmt.Sprintf("rows[%d]: %s", i, err.Error()))
 					continue
