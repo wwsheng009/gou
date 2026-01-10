@@ -802,19 +802,112 @@ func (script *Script) execStandard(process *process.Process) interface{} {
 	if process.V8Context != nil {
 		if v8ctx, ok := process.V8Context.(*v8go.Context); ok {
 			// Use shared context, no resource cleanup
-			return script.execStandardWithSharedContext(v8ctx, process)
+			return script.execStandardWithSharedContextV2(v8ctx, process)
 		}
 	}
 
 	// No shared context, create new isolate and context with full resource management
 	return script.execStandardStandalone(process)
 }
+// execStandardWithSharedContextV2 execute script with shared V8 context (no resource cleanup)
+func (script *Script) execStandardWithSharedContextV2(ctx *v8go.Context, process *process.Process) interface{} {
 
+	// 1. 包装源码：将脚本转换为导出对象的模式
+	// 通过 return { method1: function()... } 的形式将内部函数暴露出来
+	// 这里使用闭包包装，确保顶层声明不会污染全局 global 对象
+	wrappedSource := fmt.Sprintf(`(function(){ 
+		%s
+		// 动态构造导出对象，包含当前需要调用的方法
+		return { "%s": %s };
+	})();`, script.Source, process.Method, process.Method)
+
+	// 2. 编译包装后的脚本
+	instance, err := ctx.Isolate().CompileUnboundScript(wrappedSource, script.File, v8go.CompileOptions{})
+	if err != nil {
+		if e, ok := err.(*v8go.JSError); ok {
+			PrintException(process.Method, process.Args, e, script.SourceRoots)
+		}
+		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
+		return nil
+	}
+
+	// 3. 运行脚本获取导出对象 (Object)
+	// 此时 scriptInstance 是一个包含了我们所需方法的 JS Object
+	scriptInstance, err := instance.Run(ctx)
+	if err != nil {
+		if e, ok := err.(*v8go.JSError); ok {
+			PrintException(process.Method, process.Args, e, script.SourceRoots)
+		}
+		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
+		return err
+	}
+	defer scriptInstance.Release()
+
+	if !scriptInstance.IsObject() {
+		exception.New("scripts.%s.%s: script must return an object", 500, script.ID, process.Method).Throw()
+		return nil
+	}
+
+	// 4. 设置全局共享数据 (原有逻辑保持，确保注入环境)
+	global := ctx.Global()
+	share := &bridge.Share{
+		Sid:    process.Sid,
+		Root:   script.Root,
+		Global: process.Global,
+	}
+	if process.Authorized != nil {
+		share.Authorized = process.Authorized.AuthorizedToMap()
+	}
+
+	err = bridge.SetShareData(ctx, global, share)
+	if err != nil {
+		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
+		return nil
+	}
+
+	err = console.New(runtimeOption.ConsoleMode).Set("console", ctx)
+	if err != nil {
+		exception.New("scripts.%s.%s %s", 500, script.ID, process.Method, err.Error()).Throw()
+		return nil
+	}
+
+	// 5. 转换参数
+	jsArgs, err := bridge.JsValues(ctx, process.Args)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+		return nil
+	}
+	defer bridge.FreeJsValues(jsArgs)
+
+	// 6. 核心改进：从 scriptInstance 对象上调用方法，而不是从 global 调用
+	// 这样即使 global 上有同名冲突，也会被这里的局部对象隔离
+	instanceObj, _ := scriptInstance.AsObject()
+	jsRes, err := instanceObj.MethodCall(process.Method, bridge.Valuers(jsArgs)...)
+	if err != nil {
+		if e, ok := err.(*v8go.JSError); ok {
+			PrintException(process.Method, process.Args, e, script.SourceRoots)
+		}
+		log.Error("scripts.%s.%s %s", script.ID, process.Method, err.Error())
+		exception.Err(err, 500).Throw()
+		return nil
+	}
+	defer bridge.FreeJsValue(jsRes)
+
+	// 7. 转换返回值
+	goRes, err := bridge.GoValue(jsRes, ctx)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+		return nil
+	}
+
+	return goRes
+}
 // execStandardWithSharedContext execute script with shared V8 context (no resource cleanup)
 func (script *Script) execStandardWithSharedContext(ctx *v8go.Context, process *process.Process) interface{} {
-
+	// 使用 IIFE 包装源码，防止全局声明冲突
+    iifeSource := fmt.Sprintf("(function(){ %s\n })();", script.Source)
 	// Create instance of the script
-	instance, err := ctx.Isolate().CompileUnboundScript(script.Source, script.File, v8go.CompileOptions{})
+	instance, err := ctx.Isolate().CompileUnboundScript(iifeSource, script.File, v8go.CompileOptions{})
 	if err != nil {
 		if e, ok := err.(*v8go.JSError); ok {
 			PrintException(process.Method, process.Args, e, script.SourceRoots)
