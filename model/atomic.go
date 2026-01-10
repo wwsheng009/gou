@@ -103,6 +103,24 @@ func (mod *Model) CreateX(row maps.MapStrAny) (interface{}, error) {
 	if !mod.HasUUIDPrimaryKey() {
 		return mod.Create(row)
 	}
+	errs := mod.Validate(row) // 输入数据校验
+	if len(errs) > 0 {
+		msgs := []string{}
+		for _, err := range errs {
+			msgs = append(msgs, err.Column, strings.Join(err.Messages, ","))
+			log.Error("[Model] %s Create %v", mod.ID, err)
+		}
+		exception.New("%s", 400, strings.Join(msgs, ";")).Ctx(errs).Throw()
+	}
+
+	mod.FliterIn(row) // 入库前输入数据预处理
+
+	if mod.MetaData.Option.Timestamps {
+		row.Set("created_at", dbal.Raw("CURRENT_TIMESTAMP"))
+		if mod.Driver == "sqlite3" {
+			row.Set("created_at", dbal.Raw("datetime('now','localtime')"))
+		}
+	}
 	uuid := ensureUUID(row, mod.PrimaryKey)
 	err := mod.Insert(row.Keys(), [][]interface{}{row.Values()})
 	if err != nil {
