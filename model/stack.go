@@ -230,13 +230,7 @@ func (stack *QueryStack) run(res *[][]maps.MapStrAny, builder QueryStackBuilder,
 			Trace("QueryStack run()")
 	}
 
-	// rows := builder.Query.Limit(limit).MustGet()
-	if param.QueryParam.Offset > 0 {
-		builder.Query.Limit(limit).Offset(param.QueryParam.Offset)
-	} else {
-		builder.Query.Limit(limit)
-	}
-	rows := builder.Query.MustGet()
+	rows := builder.Query.Limit(limit).MustGet()
 	fmtRows := []maps.MapStr{}
 	for _, row := range rows {
 		fmtRow := maps.MapStr{}
@@ -292,10 +286,12 @@ func (stack *QueryStack) runHasMany(res *[][]maps.MapStrAny, builder QueryStackB
 	if param.QueryParam.Limit > 0 {
 		limit = param.QueryParam.Limit
 	}
+	if len(foreignIDs) > 0 {
+		builder.Query.WhereIn(name, foreignIDs)
+	}
+	builder.Query.Limit(limit)
 	if param.QueryParam.Offset > 0 {
-		builder.Query.WhereIn(name, foreignIDs).Limit(limit).Offset(param.QueryParam.Offset)
-	} else {
-		builder.Query.WhereIn(name, foreignIDs).Limit(limit)
+		builder.Query.Offset(param.QueryParam.Offset)
 	}
 	rows := builder.Query.MustGet()
 
