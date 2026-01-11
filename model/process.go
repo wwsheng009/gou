@@ -2,7 +2,6 @@ package model
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/yaoapp/gou/process"
@@ -155,9 +154,9 @@ func processList(process *process.Process) interface{} {
 
 	for _, model := range Models {
 		file := model.File
-		if !strings.HasPrefix(file, "/") {
-			file = fmt.Sprintf("/models/%s", file)
-		}
+		// if !strings.HasPrefix(file, "/") {
+		// 	file = fmt.Sprintf("/models/%s", file)
+		// }
 
 		description := ""
 		if model.MetaData.Table.Comment != "" {
