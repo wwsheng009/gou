@@ -100,8 +100,9 @@ func ensureUUID(row maps.MapStrAny, pk string) string {
 	return uuidStr
 }
 func (mod *Model) CreateX(row maps.MapStrAny) (interface{}, error) {
-	if !mod.HasUUIDPrimaryKey() {
-		return mod.Create(row)
+	uuid := ""
+	if mod.HasUUIDPrimaryKey() {
+		uuid = ensureUUID(row, mod.PrimaryKey)
 	}
 	errs := mod.Validate(row) // 输入数据校验
 	if len(errs) > 0 {
@@ -121,12 +122,21 @@ func (mod *Model) CreateX(row maps.MapStrAny) (interface{}, error) {
 			row.Set("created_at", dbal.Raw("datetime('now','localtime')"))
 		}
 	}
-	uuid := ensureUUID(row, mod.PrimaryKey)
-	err := mod.Insert(row.Keys(), [][]interface{}{row.Values()})
+
+	id, err := capsule.Query().
+		Table(mod.MetaData.Table.Name).
+		InsertGetID(row, mod.PrimaryKey) //for non id field
+
 	if err != nil {
-		return "", err
+		if uuid != "" {
+			return "", nil
+		}
+		return 0, err
 	}
-	return uuid, nil
+	if uuid != "" {
+		return uuid, nil
+	}
+	return id, err
 }
 
 // Create 创建单条数据, 返回新创建数据ID
@@ -326,23 +336,22 @@ func (mod *Model) Save(row maps.MapStrAny) (interface{}, error) {
 		row.Del("deleted_at") // 忽略删除字段
 		row.Del("updated_at") // 忽略更新字段
 	}
+	uuid := ""
 	if mod.HasUUIDPrimaryKey() {
-		uuid := ensureUUID(row, mod.PrimaryKey)
-		err := capsule.Query().
-			Table(mod.MetaData.Table.Name).
-			Insert([][]interface{}{row.Values()},row.Keys())
-		if err != nil {
-			return "", err
-		}
-		return uuid, nil
+		uuid = ensureUUID(row, mod.PrimaryKey)
 	}
-
 	id, err := capsule.Query().
 		Table(mod.MetaData.Table.Name).
 		InsertGetID(row, mod.PrimaryKey) //for non id field
 
 	if err != nil {
+		if uuid != "" {
+			return "", err
+		}
 		return 0, err
+	}
+	if uuid != "" {
+		return uuid, err
 	}
 
 	return id, err
