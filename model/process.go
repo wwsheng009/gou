@@ -187,11 +187,16 @@ func processList(process *process.Process) interface{} {
 
 // processFind 运行模型 MustFind
 func processFind(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
+	process.ValidateArgNums(1)
 	mod := Select(process.ID)
-	params, ok := AnyToQueryParam(process.Args[1])
-	if !ok {
-		params = QueryParam{}
+	params := QueryParam{}
+	if process.NumOfArgs() > 1 {
+		paramsTmp, ok := AnyToQueryParam(process.Args[1])
+		if !ok {
+			exception.New("第2个查询参数错误 %v", 400, process.Args[1]).Throw()
+		}else{
+			params = paramsTmp
+		}
 	}
 	return mod.MustFind(process.Args[0], params)
 }
