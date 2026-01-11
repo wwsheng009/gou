@@ -24,7 +24,7 @@ func (mod *Model) Find(id interface{}, param QueryParam) (maps.MapStr, error) {
 	}
 	param.Limit = 1
 	stack := NewQueryStack(param)
-	res := stack.Run()
+	res := stack.RunV2()
 	if len(res) <= 0 {
 		return nil, fmt.Errorf("ID=%v的数据不存在", id)
 	}
@@ -44,7 +44,7 @@ func (mod *Model) MustFind(id interface{}, param QueryParam) maps.MapStr {
 func (mod *Model) Get(param QueryParam) ([]maps.MapStr, error) {
 	param.Model = mod.Name
 	stack := NewQueryStack(param)
-	res := stack.Run()
+	res := stack.RunV2()
 	return res, nil
 }
 
@@ -61,7 +61,7 @@ func (mod *Model) MustGet(param QueryParam) []maps.MapStr {
 func (mod *Model) Paginate(param QueryParam, page int, pagesize int) (maps.MapStr, error) {
 	param.Model = mod.Name
 	stack := NewQueryStack(param)
-	res := stack.Paginate(page, pagesize)
+	res := stack.PaginateV2(page, pagesize)
 	return res, nil
 }
 
